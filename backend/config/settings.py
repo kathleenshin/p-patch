@@ -87,7 +87,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# TODO: implement Neon integration
+# Neon integration implemented
 DATABASES = {
     "default": dj_database_url.config(
         default=os.getenv("DATABASE_URL"),
