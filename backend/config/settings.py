@@ -35,12 +35,22 @@ ALLOWED_HOSTS = []
 # Application definition
 
 INSTALLED_APPS = [
+    # Django built-in apps
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
+    # Third-party apps
+    'rest_framework',
+
+    # Local apps
+    'users',
+    'plots',
+    'inventory',
+    'help_requests',
 ]
 
 MIDDLEWARE = [
@@ -76,6 +86,7 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# TODO: implement Neon integration
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
