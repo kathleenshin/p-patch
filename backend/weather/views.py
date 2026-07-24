@@ -1,3 +1,10 @@
-from django.shortcuts import render
+from django.http import JsonResponse
 
-# Create your views here.
+from .services.open_meteo import OpenMeteoService
+
+
+def forecast(request):
+    service = OpenMeteoService()
+    data = service.get_forecast()
+
+    return JsonResponse(data)
