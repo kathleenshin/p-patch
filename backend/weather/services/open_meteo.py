@@ -6,6 +6,7 @@ class OpenMeteoService:
 
     def get_forecast(self):
         params = {
+            # Currently set to Seattle downtown
             "latitude": 47.6062,
             "longitude": -122.3321,
             "current": [
