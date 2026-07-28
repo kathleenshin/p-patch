@@ -1,5 +1,5 @@
-from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 
 from .models import InventoryItem
 
@@ -16,29 +16,21 @@ class InventoryItemModelTests(TestCase):
 
     def test_create_inventory_item(self):
         item = InventoryItem.objects.create(
-            item="Shovel",
-            quantity=5,
+            item="Soil",
+            quantity="Half bag",
             location="Tool Shed",
             added_by=self.user,
         )
 
-        self.assertEqual(item.item, "Shovel")
-        self.assertEqual(item.quantity, 5)
+        self.assertEqual(item.item, "Soil")
+        self.assertEqual(item.quantity, "Half bag")
         self.assertEqual(item.location, "Tool Shed")
         self.assertEqual(item.added_by, self.user)
-
-    def test_quantity_defaults_to_zero(self):
-        item = InventoryItem.objects.create(
-            item="Gloves",
-            location="Storage",
-            added_by=self.user,
-        )
-
-        self.assertEqual(item.quantity, 0)
 
     def test_str(self):
         item = InventoryItem.objects.create(
             item="Watering Can",
+            quantity="1",
             location="Tool Shed",
             added_by=self.user,
         )
@@ -48,6 +40,7 @@ class InventoryItemModelTests(TestCase):
     def test_added_by_set_to_null_when_user_deleted(self):
         item = InventoryItem.objects.create(
             item="Seeds",
+            quantity="50 packets",
             location="Storage",
             added_by=self.user,
         )

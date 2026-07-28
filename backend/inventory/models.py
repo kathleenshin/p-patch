@@ -5,7 +5,7 @@ from django.db import models
 class InventoryItem(models.Model):
     item = models.CharField(max_length=100)
 
-    quantity = models.PositiveIntegerField(default=0)
+    quantity = models.CharField(max_length=100)
 
     location = models.CharField(max_length=100)
 
