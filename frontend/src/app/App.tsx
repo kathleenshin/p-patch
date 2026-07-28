@@ -4,6 +4,8 @@ import type { Screen } from "./types";
 import { TopNav } from "./components/TopNav";
 import { LoginScreen } from "./screens/LoginScreen";
 import { DashboardScreen } from "./screens/DashboardScreen";
+import { PlotScreen } from "./screens/PlotScreen";
+
 
 
 export default function App() {
@@ -18,7 +20,8 @@ export default function App() {
             <LoginScreen onLogin={() => setScreen("dashboard")} />
         )}
         {screen === "dashboard" && <DashboardScreen setScreen={setScreen} />}
-        {screen !== "login" && screen !== "dashboard" && (
+        {screen === "plot" && <PlotScreen setScreen={setScreen} />}
+        {(screen === "tasks" || screen === "inventory" || screen === "admin") && (
            <div style={{ flex: 1, display: "flex", alignItems: "center",
             justifyContent: "center", color: C.muted }}>
             More screens in follow-up PRs

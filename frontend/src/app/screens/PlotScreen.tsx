@@ -6,6 +6,8 @@ import {
 import { C, serif, sans, mono, linkStyle } from "../theme";
 import type { Screen } from "../types";
 import { DayForecastWidget } from "../components/weather/DayForecastWidget";
+import plotBedIcon from "../../imports/PlotPageIcon.jpg";
+import plotPhoto from "../../imports/PlotHeroImage.jpg";
 
 export function PlotScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [publicNote,  setPublicNote]  = useState("Tomatoes planted Apr 12. Back row is garlic — hands off until July. Squash needs extra water.");
@@ -82,7 +84,12 @@ export function PlotScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ padding: "0.625rem 0.25rem",
               display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-                <div className="img-icon img-icon-plot-bed" role="img" aria-label="garden plot" />
+                <img
+                  src={plotBedIcon}
+                  alt="garden plot"
+                  style={{ height: "3.2rem", width: "3.2rem", display: "block",
+                    objectFit: "cover", borderRadius: "0.5rem", flexShrink: 0 }}
+                />
                 <div>
                   <div style={{ ...serif, fontSize: "1.5rem", fontWeight: 800,
                     color: C.brown, lineHeight: 1.1 }}>Plot #14</div>
@@ -103,7 +110,12 @@ export function PlotScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <div style={{ borderRadius: "0.875rem", overflow: "hidden",
               border: `0.0625rem solid ${C.border}`, aspectRatio: "16/5",
               boxShadow: "0 0.125rem 0.625rem rgba(44,31,20,0.08)" }}>
-              <div className="img-plot-hero" role="img" aria-label="Garden plot" />
+              <img
+                src={plotPhoto}
+                alt="Garden plot"
+                style={{ width: "100%", height: "100%", objectFit: "cover",
+                  objectPosition: "center 40%", display: "block" }}
+              />
             </div>
 
             {/* Tabs */}

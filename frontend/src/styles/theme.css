@@ -321,27 +321,6 @@
   box-sizing: border-box;
 }
 
-.img-icon {
-  width: 2rem;
-  height: 2rem;
-  flex-shrink: 0;
-  border-radius: 0.5rem;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-.img-icon-dashboard {
-  background-image: url("../imports/DashboardHouseIcon.jpg");
-}
-
-.img-plant-icon {
-  background-image: url("../imports/DashboardPlotPlantIcon.png");
-  background-size: contain;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
 @media (max-width: 900px) {
   :root {
     --page-content-width: 92%;

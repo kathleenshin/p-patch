@@ -1,4 +1,4 @@
-import type React from "react";
+import type { CSSProperties } from "react";
 
 export const serif = { fontFamily: "'Lora', serif" };
 export const sans  = { fontFamily: "'Nunito', sans-serif" };
@@ -30,20 +30,20 @@ export const C = {
   white:      "#FFFFFF",
 };
 
-export const inputStyle: React.CSSProperties = {
+export const inputStyle: CSSProperties = {
   width: "100%", boxSizing: "border-box", padding: "0.6875rem 0.875rem",
   border: `0.0938rem solid ${C.border}`, borderRadius: "0.75rem", fontSize: "0.9rem",
   background: C.cream, color: C.brown, outline: "none",
   fontFamily: "'Nunito', sans-serif",
 };
-export const linkStyle: React.CSSProperties = {
+export const linkStyle: CSSProperties = {
   background: "none", border: "none", cursor: "pointer",
   color: C.brownLight, fontFamily: "'Nunito', sans-serif", fontSize: "0.82rem",
 };
-export const labelStyle: React.CSSProperties = {
+export const labelStyle: CSSProperties = {
   fontSize: "0.7rem", fontWeight: 800, color: C.brownLight,
   letterSpacing: "0.06em", textTransform: "uppercase", display: "block", marginBottom: "0.375rem",
 };
-export const cardStyle: React.CSSProperties = {
+export const cardStyle: CSSProperties = {
   background: C.card, border: `0.0625rem solid ${C.border}`, borderRadius: "1.25rem", padding: "1.25rem",
 };
