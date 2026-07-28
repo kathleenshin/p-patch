@@ -1,11 +1,17 @@
+# P-Patch frontend
+React + Vite UI for Judkins Park P-Patch (dashboard, plots, tasks, inventory, admin).
+## Prerequisites
+- Node.js 20+ (18+ may work)
+- npm (comes with Node)
+- Backend running locally if you need API calls (Django on port 8000)
+## Setup from scratch
+From the repo root:
+```bash
+cd frontend
+npm install
+```
 
-  # Community Garden Web App
-
-  This is a code bundle for Community Garden Web App. The original project is available at https://www.figma.com/design/9UNQZpC3AJh1h0YLeLa8Wn/Community-Garden-Web-App.
-
-  ## Running the code
-
-  Run `npm i` to install the dependencies.
-
-  Run `npm run dev` to start the development server.
-  
+To run locally:
+```bash
+npd run dev
+```
