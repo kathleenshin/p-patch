@@ -3,6 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { C, serif, sans, mono, inputStyle, linkStyle, labelStyle } from "../theme";
 import { gardenFacts } from "../data/gardenFacts";
 import { DoodleLeaf } from "../components/DoodleLeaf";
+import gardenPhoto from "../../imports/gardening_plots_growing_veggies_vivid.jpg";
 
 export function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [showPw, setShowPw] = useState(false);
@@ -11,8 +12,11 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
   return (
     <div className="login-shell" style={{ ...sans }}>
-      {/* Left: garden photo via CSS background on .login-hero */}
       <div className="login-hero">
+        <img
+          src={gardenPhoto}
+          alt="Community garden raised beds with tomatoes, lettuce, and cabbage"
+        />
         {/* Overlay content */}
         <div style={{ position: "absolute", bottom: "8%", left: "6%", right: "6%" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", marginBottom: "1rem" }}>

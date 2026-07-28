@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { C, sans, serif } from "./theme";
+import { C, sans } from "./theme";
 import type { Screen } from "./types";
 import { TopNav } from "./components/TopNav";
 import { LoginScreen } from "./screens/LoginScreen";
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>("dashboard");
+  const [screen, setScreen] = useState<Screen>("login");
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column",
