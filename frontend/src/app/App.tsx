@@ -3,6 +3,8 @@ import { C, sans } from "./theme";
 import type { Screen } from "./types";
 import { TopNav } from "./components/TopNav";
 import { LoginScreen } from "./screens/LoginScreen";
+import { DashboardScreen } from "./screens/DashboardScreen";
+
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>("login");
@@ -15,7 +17,8 @@ export default function App() {
         {screen === "login" && (
             <LoginScreen onLogin={() => setScreen("dashboard")} />
         )}
-        {screen !== "login" && (
+        {screen === "dashboard" && <DashboardScreen setScreen={setScreen} />}
+        {screen !== "login" && screen !== "dashboard" && (
            <div style={{ flex: 1, display: "flex", alignItems: "center",
             justifyContent: "center", color: C.muted }}>
             More screens in follow-up PRs

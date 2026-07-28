@@ -2,6 +2,10 @@
 
 :root {
   --font-size: 16px;
+  --viewport-height: 100vh;
+  --page-content-width: 80%;
+  --login-hero-width: 70%;
+  --login-form-width: 30%;
   --background: #FAF6F0;
   --foreground: #2C1F14;
   --card: #FFFCF7;
@@ -39,6 +43,12 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+}
+
+@supports (height: 100dvh) {
+  :root {
+    --viewport-height: 100dvh;
+  }
 }
 
 .dark {
@@ -180,13 +190,104 @@
   }
 }
 
-/* ── Login layout ─────────────────────────────────────────────────────────── */
+/* ── Layout ──────────────────────────────────────────────────────────────── */
+.page-content {
+  width: var(--page-content-width);
+  margin: 0 auto;
+  padding: 1.25rem 0;
+  box-sizing: border-box;
+}
+
+.dashboard-shell {
+  width: var(--page-content-width);
+  height: 100%;
+  display: grid;
+  grid-template-columns: 4fr 1fr;
+  overflow: hidden;
+}
+
+.dashboard-main {
+  overflow: auto;
+  padding: 1.25rem 3% 1.25rem 0;
+  min-width: 0;
+}
+
+.dashboard-aside {
+  overflow: auto;
+  padding: 1.25rem 0 1.25rem 3%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.dashboard-feed-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: stretch;
+}
+
+.plot-detail-layout {
+  display: grid;
+  grid-template-columns: 4fr 1fr;
+  gap: 0.875rem;
+}
+
+.plot-map-layout {
+  display: flex;
+  gap: 0;
+  align-items: stretch;
+}
+
+.plot-map-grid {
+  flex: 1 1 0;
+  min-width: 0;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding-right: 0.4rem;
+}
+
+.plot-map-cells {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.plot-map-detail {
+  flex: 0 0 22%;
+  min-width: 0;
+  border-left: 0.0625rem solid var(--border);
+  margin-left: 1rem;
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.task-board-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.125rem;
+}
+
+.admin-stat-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.875rem;
+}
+
+.admin-panel-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.875rem;
+}
+
 .login-shell {
   display: grid;
-  grid-template-columns: 70% 30%;
+  grid-template-columns: var(--login-hero-width) var(--login-form-width);
   width: 100%;
-  height: 100vh;
-  height: 100dvh;
+  height: var(--viewport-height);
 }
 
 .login-hero {
@@ -194,7 +295,7 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  background: #2a4a2a center / cover no-repeat;
+  background: #2a4a2a;
 }
 
 .login-hero img {
@@ -220,16 +321,108 @@
   box-sizing: border-box;
 }
 
+.img-icon {
+  width: 2rem;
+  height: 2rem;
+  flex-shrink: 0;
+  border-radius: 0.5rem;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.img-icon-dashboard {
+  background-image: url("../imports/DashboardHouseIcon.jpg");
+}
+
+.img-plant-icon {
+  background-image: url("../imports/DashboardPlotPlantIcon.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
 @media (max-width: 900px) {
-  .login-shell {
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: 38vh 1fr;
-    height: 100vh;
-    height: 100dvh;
+  :root {
+    --page-content-width: 92%;
   }
 
-  .login-hero {
-    min-height: 0;
+  .login-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: 38vh 1fr;
+  }
+
+  .dashboard-shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+    overflow: auto;
+  }
+
+  .dashboard-main {
+    padding: 1rem 0;
+    overflow: visible;
+  }
+
+  .dashboard-aside {
+    border-left: none;
+    border-top: 0.0625rem solid var(--border);
+    padding: 1rem 0;
+  }
+
+  .dashboard-feed-row {
+    grid-template-columns: 1fr;
+  }
+
+  .plot-detail-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .plot-map-layout {
+    flex-direction: column;
+  }
+
+  .plot-map-grid {
+    max-height: 45vh;
+  }
+
+  .plot-map-cells {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .plot-map-detail {
+    flex: 1 1 auto;
+    width: 100%;
+    border-left: none;
+    border-top: 0.0625rem solid var(--border);
+    margin-left: 0;
+    margin-top: 0.75rem;
+    padding-left: 0;
+    padding-top: 0.75rem;
+  }
+
+  .task-board-cols {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-panel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  :root {
+    --page-content-width: 96%;
+  }
+
+  .plot-map-cells {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-stat-row {
+    grid-template-columns: 1fr;
   }
 }
