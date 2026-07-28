@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import { Plus, Filter, X } from "lucide-react";
 import { C, serif, sans, mono, inputStyle } from "../theme";
+import taskIcon from "../../imports/TaskPageIcon.jpg";
 
 interface Task { id: number; title: string; desc: string; assignee: string; aColor: string; date: string; }
 interface Column { id: string; label: string; count: number; accent: string; tasks: Task[]; }
@@ -30,7 +31,12 @@ export function TaskScreen() {
       <div className="page-content">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.375rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
-            <div className="img-icon img-icon-task-board" role="img" aria-label="task board" />
+            <img
+              src={taskIcon}
+              alt="task board"
+              style={{ height: "2rem", width: "2rem", objectFit: "cover",
+                borderRadius: "0.5rem", display: "block", flexShrink: 0 }}
+            />
             <h1 style={{ ...serif, fontSize: "1.5rem", fontWeight: 700, color: C.brown, margin: 0 }}>Task Board</h1>
           </div>
           <button style={{ background: C.card, border: `0.0625rem solid ${C.border}`, borderRadius: "0.625rem",
