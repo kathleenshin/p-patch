@@ -1,0 +1,114 @@
+{
+  "0": {
+    "day": "clear_day",
+    "night": "clear_night"
+  },
+  "1": {
+    "day": "clear_day",
+    "night": "clear_night"
+  },
+  "2": {
+    "day": "partly_cloudy_day",
+    "night": "partly_cloudy_night"
+  },
+  "3": {
+    "day": "cloudy_day_night",
+    "night": "cloudy_day_night"
+  },
+  "45": {
+    "day": "fog_day_night",
+    "night": "fog_day_night"
+  },
+  "48": {
+    "day": "fog_day_night",
+    "night": "fog_day_night"
+  },
+  "51": {
+    "day": "drizzle_day_night",
+    "night": "drizzle_day_night"
+  },
+  "53": {
+    "day": "drizzle_day_night",
+    "night": "drizzle_day_night"
+  },
+  "55": {
+    "day": "drizzle_day_night",
+    "night": "drizzle_day_night"
+  },
+  "56": {
+    "day": "sleet_day_night",
+    "night": "sleet_day_night"
+  },
+  "57": {
+    "day": "sleet_day_night",
+    "night": "sleet_day_night"
+  },
+  "61": {
+    "day": "rain_day_night",
+    "night": "rain_day_night"
+  },
+  "63": {
+    "day": "rain_day_night",
+    "night": "rain_day_night"
+  },
+  "65": {
+    "day": "rain_day_night",
+    "night": "rain_day_night"
+  },
+  "66": {
+    "day": "sleet_day_night",
+    "night": "sleet_day_night"
+  },
+  "67": {
+    "day": "sleet_day_night",
+    "night": "sleet_day_night"
+  },
+  "71": {
+    "day": "snow_day_night",
+    "night": "snow_day_night"
+  },
+  "73": {
+    "day": "snow_day_night",
+    "night": "snow_day_night"
+  },
+  "75": {
+    "day": "snow_day_night",
+    "night": "snow_day_night"
+  },
+  "77": {
+    "day": "sleet_day_night",
+    "night": "sleet_day_night"
+  },
+  "80": {
+    "day": "rain_day_night",
+    "night": "rain_day_night"
+  },
+  "81": {
+    "day": "rain_day_night",
+    "night": "rain_day_night"
+  },
+  "82": {
+    "day": "rain_day_night",
+    "night": "rain_day_night"
+  },
+  "85": {
+    "day": "snow_day_night",
+    "night": "snow_day_night"
+  },
+  "86": {
+    "day": "snow_day_night",
+    "night": "snow_day_night"
+  },
+  "95": {
+    "day": "thunderstorm_day_night",
+    "night": "thunderstorm_day_night"
+  },
+  "96": {
+    "day": "hail_day_night",
+    "night": "hail_day_night"
+  },
+  "99": {
+    "day": "hail_day_night",
+    "night": "hail_day_night"
+  }
+}
