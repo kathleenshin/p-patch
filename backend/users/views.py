@@ -45,11 +45,7 @@ class LoginView(APIView):
                 {"detail": "Invalid email or password."},
                 status=status.HTTP_401_UNAUTHORIZED,
             )
-        if not user.is_approved and not user.is_staff:
-            return Response(
-                {"detail": "Your account is pending approval."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+
         return Response(tokens_for_user(user))
 
 

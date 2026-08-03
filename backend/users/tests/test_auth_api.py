@@ -117,38 +117,22 @@ class AuthApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-    def test_login_unapproved_non_staff_returns_403(self):
+    def test_login_unapproved_user_returns_tokens(self):
         User.objects.create_user(
             email="ada@example.com",
             password="password1",
             is_approved=False,
         )
-
         response = self.client.post(
             self.login_url,
             {"email": "ada@example.com", "password": "password1"},
             format="json",
         )
-
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertIn("pending approval", response.data["detail"].lower())
-
-    def test_login_unapproved_staff_returns_tokens(self):
-        User.objects.create_user(
-            email="admin@example.com",
-            password="password1",
-            is_approved=False,
-            is_staff=True,
-        )
-
-        response = self.client.post(
-            self.login_url,
-            {"email": "admin@example.com", "password": "password1"},
-            format="json",
-        )
-
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+        self.assertEqual(response.data["user"]["email"], "ada@example.com")
+        self.assertFalse(response.data["user"]["is_approved"])
 
     def test_me_with_valid_token_returns_user(self):
         user = User.objects.create_user(
