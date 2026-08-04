@@ -6,6 +6,8 @@ function inventoryUrl(path = "") {
 
 export type InventoryItem = {
   id: number;
+  garden_id: number;
+  garden_name: string | null;
   item: string;
   quantity: string;
   location: string;
@@ -21,17 +23,20 @@ export async function fetchInventoryItems(): Promise<InventoryItem[]> {
   return response.json();
 }
 
+const DEFAULT_GARDEN_ID = Number(import.meta.env.VITE_DEFAULT_GARDEN_ID || 1);
+
 export async function createInventoryItem(payload: {
   item: string;
   quantity: string;
   location: string;
+  garden_id?: number;
 }): Promise<InventoryItem> {
   const response = await fetch(inventoryUrl(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, garden_id: payload.garden_id ?? DEFAULT_GARDEN_ID }),
   });
 
   if (!response.ok) {
@@ -48,6 +53,7 @@ export async function updateInventoryItem(
     item: string;
     quantity: string;
     location: string;
+    garden_id?: number;
   }
 ): Promise<InventoryItem> {
   const response = await fetch(inventoryUrl(`${id}/`), {
@@ -55,7 +61,7 @@ export async function updateInventoryItem(
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify({ ...payload, garden_id: payload.garden_id ?? DEFAULT_GARDEN_ID }),
   });
 
   if (!response.ok) {
