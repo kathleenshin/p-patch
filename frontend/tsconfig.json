@@ -24,6 +24,7 @@
     },
     "types": ["vite/client"]
   },
-  "include": ["src"],
+  // Include tests so the IDE uses ES2020 (async/Promise) for Vitest files.
+  "include": ["src", "tests"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }
