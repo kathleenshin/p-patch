@@ -142,6 +142,18 @@ class WeatherViewTests(WeatherTestFixtures):
             response.json()["detail"],
             "Unable to retrieve weather data from Open-Meteo.",
         )
+        
+    def test_requires_integer_garden_id(self):
+        response = self.client.get(
+            reverse("weather-forecast"),
+            {"garden_id": "abc"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["detail"],
+            "garden_id must be an integer.",
+        )
 
 
 class OpenMeteoServiceTests(WeatherTestFixtures):

@@ -5,6 +5,7 @@ from plots.models import Garden
 
 from .services.open_meteo import OpenMeteoService, WeatherServiceError
 
+
 # Weather forecasts are retrieved for the garden's location rather than
 # the retrieving user's location.
 def weather_forecast(request):
@@ -16,7 +17,16 @@ def weather_forecast(request):
             status=400,
         )
 
+    try:
+        garden_id = int(garden_id)
+    except (ValueError, TypeError):
+        return JsonResponse(
+            {"detail": "garden_id must be an integer."},
+            status=400,
+        )
+
     garden = get_object_or_404(Garden, pk=garden_id)
+
     # Forecasts cannot be retrieved until a garden has been geocoded.
     if garden.latitude is None or garden.longitude is None:
         return JsonResponse(
