@@ -27,7 +27,6 @@ def weather_forecast(request):
 
     garden = get_object_or_404(Garden, pk=garden_id)
 
-    # Forecasts cannot be retrieved until a garden has been geocoded.
     if garden.latitude is None or garden.longitude is None:
         return JsonResponse(
             {"detail": "Garden does not have coordinates."},
