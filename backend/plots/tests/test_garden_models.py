@@ -58,3 +58,18 @@ class GardenMembershipModelTests(BasePlotTestCase):
 
         self.assertEqual(first.garden, self.garden)
         self.assertEqual(second.garden, other_garden)
+
+    def test_str(self):
+        membership = GardenMembership.objects.create(
+            user=self.user_one,
+            garden=self.garden,
+        )
+
+        self.assertEqual(
+            str(membership),
+            (
+                f"{self.user_one.email} - "
+                "Judkins Park P-Patch "
+                "(Community Volunteer, Pending)"
+            ),
+        )
