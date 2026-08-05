@@ -57,11 +57,8 @@ INSTALLED_APPS = [
     'plots',
     'inventory',
     'help_requests',
-<<<<<<< HEAD
     'notifications',
-=======
     'weather',
->>>>>>> main
 ]
 
 MIDDLEWARE = [
