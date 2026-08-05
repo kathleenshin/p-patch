@@ -354,9 +354,6 @@ export function TaskScreen() {
                           <div style={{ fontSize: "0.69rem", color: C.muted }}>
                             Assigned to: {getUserLabel(request.assigned_to, "Unassigned")}
                           </div>
-                          <div style={{ fontSize: "0.69rem", color: C.muted }}>
-                            Created by: {getUserLabel(request.created_by, "Unknown")}
-                          </div>
                         </div>
                       );
                     })()}
