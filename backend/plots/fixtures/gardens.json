@@ -1,0 +1,18 @@
+[
+  {
+    "model": "plots.garden",
+    "pk": 1,
+    "fields": {
+      "name": "Judkins Park P-Patch",
+      "description": "Community garden in Judkins Park, Seattle.",
+      "address": "2321 S Norman St,",
+      "city": "Seattle",
+      "state": "WA",
+      "zip_code": "98144",
+      "latitude": 47.5917,
+      "longitude": -122.2926,
+      
+      "created_at": "2026-08-03T19:00:00Z"
+    }
+  }
+]

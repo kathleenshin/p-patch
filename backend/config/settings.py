@@ -57,7 +57,11 @@ INSTALLED_APPS = [
     'plots',
     'inventory',
     'help_requests',
+<<<<<<< HEAD
     'notifications',
+=======
+    'weather',
+>>>>>>> main
 ]
 
 MIDDLEWARE = [
@@ -95,11 +99,13 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
 # Neon integration implemented
+database_url = os.getenv("DATABASE_URL", "sqlite:///db.sqlite3")
+
 DATABASES = {
     "default": dj_database_url.config(
-        default=os.getenv("DATABASE_URL"),
+        default=database_url,
         conn_max_age=600,
-        ssl_require=True,
+        ssl_require=database_url.startswith("postgres") if database_url else False,
     )
 }
 
