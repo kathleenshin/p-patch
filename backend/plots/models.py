@@ -8,18 +8,31 @@ from django.utils import timezone
 class Garden(models.Model):
     name = models.CharField(max_length=150)
 
-    # Optional fields
-    description = models.TextField(blank=True)  # Basic context about the garden and who it serves
+    description = models.TextField(blank=True)
     address = models.CharField(max_length=255, blank=True)
     city = models.CharField(max_length=50, blank=True)
     state = models.CharField(max_length=50, blank=True)
     zip_code = models.CharField(max_length=10, blank=True)
 
+    # Store coordinates so the address does not need to be geocoded every time weather data is requested.
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.name
-
+    
 # Join/relationship table between user and garden
 class GardenMembership(models.Model):
     ROLE_CHOICES = [
