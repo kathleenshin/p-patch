@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'plots',
     'inventory',
     'help_requests',
+    'notifications',
 ]
 
 MIDDLEWARE = [
