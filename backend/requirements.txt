@@ -6,4 +6,10 @@ psycopg==3.3.4
 psycopg-binary==3.3.4
 python-dotenv==1.2.2
 sqlparse==0.5.5
+<<<<<<< HEAD
 requests==2.34.2
+=======
+requests==2.34.2
+djangorestframework-simplejwt==5.5.1
+django-cors-headers==4.9.0
+>>>>>>> main
