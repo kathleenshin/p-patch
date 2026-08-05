@@ -6,4 +6,10 @@ from .models import Plot
 class PlotSerializer(serializers.ModelSerializer):
     class Meta:
         model = Plot
-        fields = "__all__"
+        fields = [
+            "id",
+            "garden",
+            "plot_number",
+            "is_active",
+        ]
+        read_only_fields = ["id"]
