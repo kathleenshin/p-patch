@@ -1,6 +1,6 @@
 from django.db import IntegrityError
 
-from plots.models import Plot
+from plots.models import Garden, Plot
 
 from .test_fixtures import BasePlotTestCase
 
@@ -9,13 +9,18 @@ class PlotModelTests(BasePlotTestCase):
     def test_create_plot(self):
         plot = Plot.objects.create(
             garden=self.garden,
-            plot_number="2",
+            plot_number="1",
         )
 
-        self.assertEqual(plot.plot_number, "2")
+        self.assertEqual(plot.plot_number, "1")
         self.assertEqual(plot.garden, self.garden)
 
     def test_plot_number_unique_within_garden(self):
+        Plot.objects.create(
+            garden=self.garden,
+            plot_number="1",
+        )
+
         with self.assertRaises(IntegrityError):
             Plot.objects.create(
                 garden=self.garden,
@@ -23,17 +28,26 @@ class PlotModelTests(BasePlotTestCase):
             )
 
     def test_plot_number_can_repeat_across_gardens(self):
-        plot = Plot.objects.create(
-            garden=self.other_garden,
+        other_garden = Garden.objects.create(
+            name="Ballard P-Patch",
+        )
+
+        Plot.objects.create(
+            garden=self.garden,
             plot_number="1",
         )
 
-        self.assertEqual(plot.garden, self.other_garden)
+        plot = Plot.objects.create(
+            garden=other_garden,
+            plot_number="1",
+        )
+
+        self.assertEqual(plot.garden, other_garden)
 
     def test_is_active_defaults_to_true(self):
         plot = Plot.objects.create(
             garden=self.garden,
-            plot_number="3",
+            plot_number="1",
         )
 
         self.assertTrue(plot.is_active)

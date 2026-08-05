@@ -3,12 +3,18 @@ import datetime
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 
-from plots.models import PlotOwnership
+from plots.models import Plot, PlotOwnership
 
 from .test_fixtures import BasePlotTestCase
 
 
 class PlotOwnershipModelTests(BasePlotTestCase):
+    def setUp(self):
+        self.plot = Plot.objects.create(
+            garden=self.garden,
+            plot_number="1",
+        )
+
     def test_create_plot_ownership(self):
         ownership = PlotOwnership.objects.create(
             user=self.user_one,
@@ -39,7 +45,9 @@ class PlotOwnershipModelTests(BasePlotTestCase):
         self.plot.delete()
 
         self.assertFalse(
-            PlotOwnership.objects.filter(id=ownership_id).exists()
+            PlotOwnership.objects.filter(
+                id=ownership_id
+            ).exists()
         )
 
     def test_cascade_on_user_delete(self):
@@ -53,7 +61,9 @@ class PlotOwnershipModelTests(BasePlotTestCase):
         self.user_one.delete()
 
         self.assertFalse(
-            PlotOwnership.objects.filter(id=ownership_id).exists()
+            PlotOwnership.objects.filter(
+                id=ownership_id
+            ).exists()
         )
 
     def test_str(self):
@@ -65,7 +75,10 @@ class PlotOwnershipModelTests(BasePlotTestCase):
 
         self.assertEqual(
             str(ownership),
-            "testuser@example.com - Judkins Park P-Patch - Plot 1",
+            (
+                f"{self.user_one.email} - "
+                "Judkins Park P-Patch - Plot 1"
+            ),
         )
 
     def test_unique_active_ownership_blocks_duplicate_active_row(self):
@@ -82,7 +95,9 @@ class PlotOwnershipModelTests(BasePlotTestCase):
                 start_date=self.d2,
             )
 
-    def test_history_allows_new_active_row_after_previous_ownership_ended(self):
+    def test_history_allows_new_active_row_after_previous_ownership_ended(
+        self,
+    ):
         PlotOwnership.objects.create(
             user=self.user_one,
             plot=self.plot,
@@ -130,7 +145,9 @@ class PlotOwnershipModelTests(BasePlotTestCase):
         self.assertFalse(first.is_primary)
         self.assertTrue(second.is_primary)
 
-    def test_ending_primary_promotes_oldest_remaining_active_owner(self):
+    def test_ending_primary_promotes_oldest_remaining_active_owner(
+        self,
+    ):
         first = PlotOwnership.objects.create(
             user=self.user_one,
             plot=self.plot,
@@ -211,7 +228,9 @@ class PlotOwnershipModelTests(BasePlotTestCase):
                 end_date=self.d1,
             )
 
-    def test_ending_non_primary_returns_none_and_keeps_current_primary(self):
+    def test_ending_non_primary_returns_none_and_keeps_current_primary(
+        self,
+    ):
         primary = PlotOwnership.objects.create(
             user=self.user_one,
             plot=self.plot,
@@ -261,7 +280,9 @@ class PlotOwnershipModelTests(BasePlotTestCase):
             ).exists()
         )
 
-    def test_ending_primary_with_invalid_replacement_raises_validation_error(self):
+    def test_ending_primary_with_invalid_replacement_raises_validation_error(
+        self,
+    ):
         primary = PlotOwnership.objects.create(
             user=self.user_one,
             plot=self.plot,

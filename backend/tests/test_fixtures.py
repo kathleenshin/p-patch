@@ -10,6 +10,8 @@ User = get_user_model()
 
 
 class BasePlotTestCase(TestCase):
+    # Shared fixtures for the plots app tests.
+
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
@@ -45,8 +47,14 @@ class BasePlotTestCase(TestCase):
             password="password",
         )
 
-        cls.garden = Garden.objects.create(name="Judkins Park P-Patch")
-        cls.other_garden = Garden.objects.create(name="Ballard P-Patch")
+        cls.garden = Garden.objects.create(
+            name="Judkins Park P-Patch",
+        )
+
+        cls.other_garden = Garden.objects.create(
+            name="Ballard P-Patch",
+        )
+
         cls.plot = Plot.objects.create(
             garden=cls.garden,
             plot_number="1",

@@ -1,11 +1,17 @@
 from django.utils import timezone
 
-from plots.models import PlotNote
+from plots.models import Plot, PlotNote
 
 from .test_fixtures import BasePlotTestCase
 
 
 class PlotNoteModelTests(BasePlotTestCase):
+    def setUp(self):
+        self.plot = Plot.objects.create(
+            garden=self.garden,
+            plot_number="1",
+        )
+
     def test_create_note(self):
         note = PlotNote.objects.create(
             plot=self.plot,
@@ -13,7 +19,10 @@ class PlotNoteModelTests(BasePlotTestCase):
             content="Looking good!",
         )
 
-        self.assertEqual(note.content, "Looking good!")
+        self.assertEqual(
+            note.content,
+            "Looking good!",
+        )
 
     def test_visibility_defaults_to_this_plot(self):
         note = PlotNote.objects.create(
@@ -22,7 +31,10 @@ class PlotNoteModelTests(BasePlotTestCase):
             content="Private note",
         )
 
-        self.assertEqual(note.visibility, "this_plot")
+        self.assertEqual(
+            note.visibility,
+            "this_plot",
+        )
 
     def test_can_create_plot_stewards_visible_note(self):
         note = PlotNote.objects.create(
@@ -59,7 +71,10 @@ class PlotNoteModelTests(BasePlotTestCase):
             content="Test",
         )
 
-        self.assertGreaterEqual(note.created_at, before)
+        self.assertGreaterEqual(
+            note.created_at,
+            before,
+        )
 
     def test_newest_notes_appear_first(self):
         older = PlotNote.objects.create(
@@ -90,7 +105,9 @@ class PlotNoteModelTests(BasePlotTestCase):
         self.plot.delete()
 
         self.assertFalse(
-            PlotNote.objects.filter(id=note_id).exists()
+            PlotNote.objects.filter(
+                id=note_id
+            ).exists()
         )
 
     def test_cascade_on_user_delete(self):
@@ -104,7 +121,9 @@ class PlotNoteModelTests(BasePlotTestCase):
         self.user_one.delete()
 
         self.assertFalse(
-            PlotNote.objects.filter(id=note_id).exists()
+            PlotNote.objects.filter(
+                id=note_id
+            ).exists()
         )
 
     def test_str(self):
@@ -116,5 +135,5 @@ class PlotNoteModelTests(BasePlotTestCase):
 
         self.assertEqual(
             str(note),
-            "Note by testuser@example.com on Plot 1",
+            f"Note by {self.user_one.email} on Plot 1",
         )

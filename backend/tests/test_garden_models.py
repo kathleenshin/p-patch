@@ -7,9 +7,10 @@ from .test_fixtures import BasePlotTestCase
 
 class GardenModelTests(BasePlotTestCase):
     def test_str(self):
-        garden = Garden.objects.create(name="Judkins Park P-Patch")
-
-        self.assertEqual(str(garden), "Judkins Park P-Patch")
+        self.assertEqual(
+            str(self.garden),
+            "Judkins Park P-Patch",
+        )
 
 
 class GardenMembershipModelTests(BasePlotTestCase):
@@ -19,8 +20,14 @@ class GardenMembershipModelTests(BasePlotTestCase):
             garden=self.garden,
         )
 
-        self.assertEqual(membership.role, "community_volunteer")
-        self.assertEqual(membership.status, "pending")
+        self.assertEqual(
+            membership.role,
+            "community_volunteer",
+        )
+        self.assertEqual(
+            membership.status,
+            "pending",
+        )
 
     def test_unique_membership_per_garden_and_user(self):
         GardenMembership.objects.create(
@@ -35,6 +42,10 @@ class GardenMembershipModelTests(BasePlotTestCase):
             )
 
     def test_user_can_join_multiple_gardens(self):
+        other_garden = Garden.objects.create(
+            name="Ballard P-Patch",
+        )
+
         first = GardenMembership.objects.create(
             user=self.user_one,
             garden=self.garden,
@@ -42,8 +53,8 @@ class GardenMembershipModelTests(BasePlotTestCase):
 
         second = GardenMembership.objects.create(
             user=self.user_one,
-            garden=self.other_garden,
+            garden=other_garden,
         )
 
         self.assertEqual(first.garden, self.garden)
-        self.assertEqual(second.garden, self.other_garden)
+        self.assertEqual(second.garden, other_garden)
