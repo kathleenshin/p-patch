@@ -4,7 +4,7 @@ from django.db import models
 
 class InventoryItemQuerySet(models.QuerySet):
     def safe(self):
-        return self.only("id", "item", "quantity", "location", "added_by_id", "created_at")
+        return self.only("id", "item", "quantity", "location", "garden_id", "added_by_id", "created_at")
 
 
 class InventoryItemManager(models.Manager.from_queryset(InventoryItemQuerySet)):
