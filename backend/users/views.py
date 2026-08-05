@@ -6,6 +6,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import User
 from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
+from .permissions import IsGardenAdmin
 
 
 def tokens_for_user(user):
@@ -54,4 +55,45 @@ class MeView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+# --- Garden-admin approval loop (list / approve / reject pending users) ---
+
+class PendingUsersView(generics.ListAPIView):
+    """GET /api/auth/pending/ — users waiting for approval."""
+
+    permission_classes = [IsGardenAdmin]
+    serializer_class = UserSerializer
+
+    def get_queryset(self):
+        return User.objects.filter(is_approved=False).order_by("date_joined")
+
+
+class ApproveUserView(APIView):
+    """POST /api/auth/pending/<id>/approve/ — set is_approved=True."""
+
+    permission_classes = [IsGardenAdmin]
+
+    def post(self, request, user_id):
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        user.is_approved = True
+        user.save(update_fields=["is_approved"])
+        return Response(UserSerializer(user).data)
+
+
+class RejectUserView(APIView):
+    """POST /api/auth/pending/<id>/reject/ — delete an unapproved signup."""
+
+    permission_classes = [IsGardenAdmin]
+
+    def post(self, request, user_id):
+        try:
+            user = User.objects.get(pk=user_id, is_approved=False)
+        except User.DoesNotExist:
+            return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+        user.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
