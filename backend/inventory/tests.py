@@ -10,7 +10,7 @@ class InventoryItemModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_user(
-            username="testuser",
+            email="inventory-testuser@example.com",
             password="password",
         )
 
