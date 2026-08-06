@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/inventory/<int:pk>/', inventory_detail, name='inventory-detail'),
     path("api/weather/", include("weather.urls")),
     path("api/auth/", include("users.urls")),
+    path("api/", include("plots.urls")),
     path("api/help-requests/", include("help_requests.urls")),
 
 ]
