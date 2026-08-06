@@ -3,6 +3,8 @@ from .models import User
 
 
 class UserSerializer(serializers.ModelSerializer):
+    """Public user profile for /me and admin pending list."""
+
     class Meta:
         model = User
         fields = (
@@ -12,6 +14,7 @@ class UserSerializer(serializers.ModelSerializer):
             "last_name",
             "is_approved",
             "is_garden_admin",
+            "date_joined",  # Shown on Admin pending registrations
         )
         read_only_fields = fields
 

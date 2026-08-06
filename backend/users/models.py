@@ -32,6 +32,8 @@ class UserManager(BaseUserManager):
 
 class User(AbstractUser):
     email = models.EmailField(unique=True, blank=False)
+    # Product roles: pending vs member (is_approved), plus garden admin.
+    # is_staff / is_superuser stay Django-only (access to /admin/), not app roles.
     is_approved = models.BooleanField(default=False)
     is_garden_admin = models.BooleanField(default=False)
 
@@ -39,6 +41,12 @@ class User(AbstractUser):
     REQUIRED_FIELDS = []
 
     objects = UserManager()
+
+    def save(self, *args, **kwargs):
+        # Garden admin implies member access in the app.
+        if self.is_garden_admin:
+            self.is_approved = True
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.email
