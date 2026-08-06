@@ -18,10 +18,14 @@
 from django.contrib import admin
 from django.urls import include, path
 
+from inventory.views import inventory_detail, inventory_list
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/inventory/', inventory_list, name='inventory-list'),
+    path('api/inventory/<int:pk>/', inventory_detail, name='inventory-detail'),
+    path("api/weather/", include("weather.urls")),
     path("api/auth/", include("users.urls")),
     path("api/help-requests/", include("help_requests.urls")),
-    path("api/weather/", include("weather.urls")),
 
 ]
