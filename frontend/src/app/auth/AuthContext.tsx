@@ -23,6 +23,10 @@ type AuthContextValue = {
   accessToken: string | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  /** From /me — false means pending (Dashboard-only access). */
+  isApproved: boolean;
+  /** From /me — controls Admin nav/screen. */
+  isGardenAdmin: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, fullName?: string) => Promise<void>;
   logout: () => void;
@@ -106,6 +110,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       accessToken,
       isLoading,
       isAuthenticated: Boolean(user && accessToken),
+      // Role flags for TopNav / App gating (pending vs member vs admin).
+      isApproved: Boolean(user?.is_approved),
+      isGardenAdmin: Boolean(user?.is_garden_admin),
       login,
       register,
       logout,
