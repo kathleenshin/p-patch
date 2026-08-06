@@ -2,29 +2,18 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Plus, Filter, X } from "lucide-react";
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import taskIcon from "../../imports/TaskPageIcon.jpg";
-
-const API_BASE_URL = "http://127.0.0.1:8000";
+import {
+  createHelpRequest,
+  deleteHelpRequest,
+  fetchHelpRequests,
+  fetchUsers,
+  updateHelpRequest,
+  type HelpRequest,
+  type UserOption,
+} from "../../lib/helpRequestsApi";
 
 interface Task { id: number | string; title: string; desc: string; assignee: string; aColor: string; date: string; priority?: string; }
 interface Column { id: string; label: string; count: number; accent: string; tasks: Task[]; }
-interface HelpRequest {
-  id: number;
-  title: string;
-  description: string;
-  status: string;
-  priority: string;
-  category: string;
-  assigned_to: number | null;
-  created_by: number | null;
-  due_date: string | null;
-}
-
-interface UserOption {
-  id: number;
-  email: string;
-  first_name?: string;
-  last_name?: string;
-}
 
 const priorityOptions = [
   { value: "low", label: "Low" },
@@ -84,23 +73,20 @@ export function TaskScreen() {
   };
 
   const loadRequests = async () => {
-    const response = await fetch(`${API_BASE_URL}/api/help-requests/`);
-
-    if (response.ok) {
-      const data = await response.json();
+    try {
+      const data = await fetchHelpRequests();
       setRequests(data);
+    } catch {
+      setError("Unable to load help requests.");
     }
   };
 
   const loadUsers = async () => {
-    const response = await fetch(`${API_BASE_URL}/api/auth/users/`);
-    if (!response.ok) {
-      return;
-    }
-
-    const data = await response.json().catch(() => []);
-    if (Array.isArray(data)) {
+    try {
+      const data = await fetchUsers();
       setUsers(data);
+    } catch {
+      setUsers([]);
     }
   };
 
@@ -128,12 +114,8 @@ export function TaskScreen() {
     setError(null);
     setSuccess(null);
 
-    const response = await fetch(`${API_BASE_URL}/api/help-requests/`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    try {
+      const data = await createHelpRequest({
         title,
         description,
         garden: 1,
@@ -141,27 +123,22 @@ export function TaskScreen() {
         category,
         due_date: dueDate || null,
         assigned_to: assignee || null,
-      }),
-    });
+      });
 
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      setError(data.detail || "Unable to create the help request.");
+      setRequests((current) => [data, ...current]);
+      setTitle("");
+      setDescription("");
+      setPriority("medium");
+      setCategory("other");
+      setDueDate("");
+      setAssignee("");
+      setShowNew(false);
+      setSuccess("Help request created.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create the help request.");
+    } finally {
       setIsSubmitting(false);
-      return;
     }
-
-    setRequests((current) => [data, ...current]);
-    setTitle("");
-    setDescription("");
-    setPriority("medium");
-    setCategory("other");
-    setDueDate("");
-    setAssignee("");
-    setShowNew(false);
-    setSuccess("Help request created.");
-    setIsSubmitting(false);
   };
 
   const handleStatusChange = async (requestId: number, nextStatus: string) => {
@@ -169,25 +146,15 @@ export function TaskScreen() {
     setError(null);
     setSuccess(null);
 
-    const response = await fetch(`${API_BASE_URL}/api/help-requests/${requestId}/`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ status: nextStatus }),
-    });
-
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      setError(data.detail || "Unable to update the help request.");
+    try {
+      const data = await updateHelpRequest(requestId, { status: nextStatus });
+      setRequests((current) => current.map((request) => (request.id === requestId ? data : request)));
+      setSuccess("Help request updated.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update the help request.");
+    } finally {
       setStatusChangingId(null);
-      return;
     }
-
-    setRequests((current) => current.map((request) => (request.id === requestId ? data : request)));
-    setSuccess("Help request updated.");
-    setStatusChangingId(null);
   };
 
   const handleDeleteRequest = async (requestId: number) => {
@@ -195,20 +162,15 @@ export function TaskScreen() {
     setError(null);
     setSuccess(null);
 
-    const response = await fetch(`${API_BASE_URL}/api/help-requests/${requestId}/`, {
-      method: "DELETE",
-    });
-
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      setError(data.detail || "Unable to delete the help request.");
+    try {
+      await deleteHelpRequest(requestId);
+      setRequests((current) => current.filter((request) => request.id !== requestId));
+      setSuccess("Help request deleted.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete the help request.");
+    } finally {
       setDeletingId(null);
-      return;
     }
-
-    setRequests((current) => current.filter((request) => request.id !== requestId));
-    setSuccess("Help request deleted.");
-    setDeletingId(null);
   };
 
   const openRequestDetails = (request: HelpRequest) => {
@@ -233,12 +195,8 @@ export function TaskScreen() {
     setError(null);
     setSuccess(null);
 
-    const response = await fetch(`${API_BASE_URL}/api/help-requests/${selectedRequest.id}/`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    try {
+      const data = await updateHelpRequest(selectedRequest.id, {
         title: editTitle,
         description: editDescription,
         status: editStatus,
@@ -246,22 +204,17 @@ export function TaskScreen() {
         category: editCategory,
         due_date: editDueDate || null,
         assigned_to: editAssignee || null,
-      }),
-    });
+      });
 
-    const data = await response.json().catch(() => ({}));
-
-    if (!response.ok) {
-      setError(data.detail || "Unable to update the help request.");
+      setRequests((current) => current.map((request) => (request.id === selectedRequest.id ? data : request)));
+      setSelectedRequest(null);
+      setSuccess("Help request updated.");
+      void loadRequests();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to update the help request.");
+    } finally {
       setIsSavingDetails(false);
-      return;
     }
-
-    setRequests((current) => current.map((request) => (request.id === selectedRequest.id ? data : request)));
-    setSelectedRequest(null);
-    setSuccess("Help request updated.");
-    setIsSavingDetails(false);
-    void loadRequests();
   };
 
   return (
