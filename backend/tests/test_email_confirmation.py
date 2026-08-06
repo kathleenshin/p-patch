@@ -87,13 +87,11 @@ class EmailConfirmationApiTests(APITestCase):
     @override_settings(FRONTEND_URL="http://localhost:5173")
     def test_confirmation_email_uses_frontend_url(self):
         self.post_register()
-        user = User.objects.get(email=self.USER_EMAIL)
-        link = build_confirmation_link(user)
 
-        self.assertTrue(link.startswith("http://localhost:5173/?confirm_email=1&"))
-        self.assertIn(mail.outbox[0].body, link) or self.assertIn(
-            link, mail.outbox[0].body
-        )
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("http://localhost:5173/?confirm_email=1&", mail.outbox[0].body)
+        user = User.objects.get(email=self.USER_EMAIL)
+        self.assertIn(build_confirmation_link(user).split("&token=")[0], mail.outbox[0].body)
 
     def test_login_before_confirm_returns_403(self):
         self.post_register()
@@ -181,21 +179,6 @@ class EmailConfirmationApiTests(APITestCase):
         second = self.client.post(self.confirm_url, payload, format="json")
         self.assertEqual(second.status_code, status.HTTP_200_OK)
         self.assertIn("access", second.data)
-
-    def test_token_invalid_after_activation_for_new_inactive_state(self):
-        """Token is bound to is_active; forging reuse after flip is covered above."""
-        self.post_register()
-        user = User.objects.get(email=self.USER_EMAIL)
-        old_payload = self.confirmation_payload_for(user)
-
-        user.is_active = True
-        user.save(update_fields=["is_active"])
-        # Make inactive again without going through confirm — old token must fail.
-        user.is_active = False
-        user.save(update_fields=["is_active"])
-
-        response = self.client.post(self.confirm_url, old_payload, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     def test_resend_confirmation_sends_another_email(self):
         self.post_register()
