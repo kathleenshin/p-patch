@@ -39,10 +39,8 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
       // Parent switches to dashboard after tokens/user are stored in context.
       onLogin();
     } catch (err) {
-      // Map API failures to on-screen messages; 403 = pending approval today.
-      if (err instanceof ApiError && err.status === 403) {
-        setError(err.message || "Your account is pending approval.");
-      } else if (err instanceof ApiError) {
+      // Surface API error messages (validation, bad credentials, etc.).
+      if (err instanceof ApiError) {
         setError(err.message);
       } else if (err instanceof Error) {
         setError(err.message);
