@@ -1,7 +1,7 @@
 import { apiFetch } from "./api";
 import { clearTokens, setTokens } from "./authStorage";
 
-/** User shape returned by /api/auth/login|register|me. */
+/** User shape returned by /api/auth/login|register|me (and admin pending list). */
 export type AuthUser = {
   id: number;
   email: string;
@@ -9,6 +9,8 @@ export type AuthUser = {
   last_name: string;
   is_approved: boolean;
   is_garden_admin: boolean;
+  /** ISO timestamp; used on Admin pending list. */
+  date_joined?: string;
 };
 
 /** Successful login/register payload: JWTs + user profile. */
@@ -57,8 +59,7 @@ export async function fetchMe(accessToken: string): Promise<AuthUser> {
   });
 }
 
-/**
- * POST /api/auth/refresh/ — exchange refresh token for a new access token.
+/** POST /api/auth/refresh/ — exchange refresh token for a new access token.
  * Stored for later use; not wired into auto-retry yet.
  */
 export async function refreshAccessToken(
