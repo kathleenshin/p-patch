@@ -10,54 +10,74 @@ import { InventoryScreen } from "./screens/InventoryScreen";
 import { AdminScreen } from "./screens/AdminScreen";
 import { useAuth } from "./auth/AuthContext";
 
+/** Pending users may only open Dashboard; Admin requires is_garden_admin. */
+function canOpenScreen(
+    screen: Screen,
+    opts: { isApproved: boolean; isGardenAdmin: boolean },
+): boolean {
+    if (screen === "login" || screen === "dashboard") return true;
+    if (screen === "admin") return opts.isGardenAdmin;
+    return opts.isApproved;
+}
+
 /**
- * Root shell: waits for auth restore, then shows either LoginScreen
- * or the authenticated app screens. Unauthenticated users cannot open
- * dashboard/plot/tasks/etc.
+ * Root shell: restore session, then gate screens by auth + approval role.
  */
 export default function App() {
-  const { isAuthenticated, isLoading } = useAuth();
-  const [screen, setScreen] = useState<Screen>("login");
+    const { isAuthenticated, isLoading, isApproved, isGardenAdmin } = useAuth();
+    const [screen, setScreen] = useState<Screen>("login");
 
-  // Keep screen in sync with auth: force login when logged out;
-  // leave login for dashboard once authenticated.
-  useEffect(() => {
-    if (isLoading) return;
-    if (!isAuthenticated) {
-      setScreen("login");
-    } else if (screen === "login") {
-      setScreen("dashboard");
+    // Keep route in sync: logged out → login; logged in → allowed screen only.
+    useEffect(() => {
+        if (isLoading) return;
+        if (!isAuthenticated) {
+            setScreen("login");
+            return;
+        }
+        if (screen === "login") {
+            setScreen("dashboard");
+            return;
+        }
+        // Block deep-links to screens the current role cannot open.
+        if (!canOpenScreen(screen, { isApproved, isGardenAdmin })) {
+            setScreen("dashboard");
+        }
+    }, [isAuthenticated, isLoading, isApproved, isGardenAdmin, screen]);
+
+    if (isLoading) {
+        return (
+            <div style={{ height: "100vh", display: "flex", alignItems: "center",
+                justifyContent: "center", background: C.cream, color: C.muted, ...sans }}>
+                Loading…
+            </div>
+        );
     }
-  }, [isAuthenticated, isLoading, screen]);
 
-  // Still checking localStorage + /me — avoid flashing the wrong screen.
-  if (isLoading) {
+    const showApp = isAuthenticated && screen !== "login";
+
     return (
-      <div style={{ height: "100vh", display: "flex", alignItems: "center",
-        justifyContent: "center", background: C.cream, color: C.muted, ...sans }}>
-        Loading…
-      </div>
+        <div style={{ height: "100vh", display: "flex", flexDirection: "column",
+            background: C.cream, ...sans, overflow: "hidden" }}>
+            {showApp && <TopNav screen={screen} setScreen={setScreen} />}
+            <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+                {!isAuthenticated && (
+                    <LoginScreen onLogin={() => setScreen("dashboard")} />
+                )}
+                {/* Everyone authenticated can see Dashboard (incl. pending). */}
+                {showApp && screen === "dashboard" && (
+                    <DashboardScreen setScreen={setScreen} />
+                )}
+                {/* Member screens require approval. */}
+                {showApp && isApproved && screen === "plot" && (
+                    <PlotScreen setScreen={setScreen} />
+                )}
+                {showApp && isApproved && screen === "tasks" && <TaskScreen />}
+                {showApp && isApproved && screen === "inventory" && <InventoryScreen />}
+                {/* Admin console is garden-admin only. */}
+                {showApp && isGardenAdmin && screen === "admin" && (
+                    <AdminScreen setScreen={setScreen} />
+                )}
+            </div>
+        </div>
     );
-  }
-
-  const showApp = isAuthenticated && screen !== "login";
-
-  return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column",
-      background: C.cream, ...sans, overflow: "hidden" }}>
-      {showApp && <TopNav screen={screen} setScreen={setScreen} />}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {/* Logged-out: login/register only */}
-        {!isAuthenticated && (
-          <LoginScreen onLogin={() => setScreen("dashboard")} />
-        )}
-        {/* Logged-in: render the active screen */}
-        {showApp && screen === "dashboard" && <DashboardScreen setScreen={setScreen} />}
-        {showApp && screen === "plot" && <PlotScreen setScreen={setScreen} />}
-        {showApp && screen === "tasks" && <TaskScreen />}
-        {showApp && screen === "inventory" && <InventoryScreen />}
-        {showApp && screen === "admin" && <AdminScreen setScreen={setScreen} />}
-      </div>
-    </div>
-  );
 }
