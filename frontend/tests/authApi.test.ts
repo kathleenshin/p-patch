@@ -1,0 +1,121 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api";
+
+const apiFetchMock = vi.fn();
+
+vi.mock("@/lib/api", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/api")>("@/lib/api");
+  return {
+    ...actual,
+    apiFetch: (...args: unknown[]) => apiFetchMock(...args),
+  };
+});
+
+import {
+  fetchMe,
+  login,
+  logout,
+  refreshAccessToken,
+  register,
+} from "@/lib/authApi";
+import { getAccessToken, getRefreshToken } from "@/lib/authStorage";
+
+const sampleUser = {
+  id: 1,
+  email: "ada@example.com",
+  first_name: "Ada",
+  last_name: "Lovelace",
+  is_approved: true,
+  is_garden_admin: false,
+};
+
+const sampleAuthResponse = {
+  access: "access-abc",
+  refresh: "refresh-xyz",
+  user: sampleUser,
+};
+
+describe("authApi", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    apiFetchMock.mockReset();
+  });
+
+  it("login posts credentials, stores tokens, and returns auth payload", async () => {
+    apiFetchMock.mockResolvedValueOnce(sampleAuthResponse);
+
+    const result = await login("ada@example.com", "password1");
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/login/", {
+      method: "POST",
+      body: { email: "ada@example.com", password: "password1" },
+    });
+    expect(result).toEqual(sampleAuthResponse);
+    expect(getAccessToken()).toBe("access-abc");
+    expect(getRefreshToken()).toBe("refresh-xyz");
+  });
+
+  it("register posts full_name and stores tokens", async () => {
+    apiFetchMock.mockResolvedValueOnce(sampleAuthResponse);
+
+    await register("ada@example.com", "password1", "Ada Lovelace");
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/register/", {
+      method: "POST",
+      body: {
+        email: "ada@example.com",
+        password: "password1",
+        full_name: "Ada Lovelace",
+      },
+    });
+    expect(getAccessToken()).toBe("access-abc");
+  });
+
+  it("login surfaces ApiError from the API", async () => {
+    apiFetchMock.mockRejectedValueOnce(
+      new ApiError("Invalid email or password.", 401, {
+        detail: "Invalid email or password.",
+      }),
+    );
+
+    await expect(login("ada@example.com", "password1")).rejects.toMatchObject({
+      status: 401,
+      message: "Invalid email or password.",
+    });
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it("fetchMe sends Bearer access token", async () => {
+    apiFetchMock.mockResolvedValueOnce(sampleUser);
+
+    const me = await fetchMe("access-abc");
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/me/", {
+      method: "GET",
+      token: "access-abc",
+    });
+    expect(me.email).toBe("ada@example.com");
+  });
+
+  it("refreshAccessToken posts refresh token", async () => {
+    apiFetchMock.mockResolvedValueOnce({ access: "access-new" });
+
+    const result = await refreshAccessToken("refresh-xyz");
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/refresh/", {
+      method: "POST",
+      body: { refresh: "refresh-xyz" },
+    });
+    expect(result.access).toBe("access-new");
+  });
+
+  it("logout clears stored tokens", () => {
+    localStorage.setItem("p-patch.access", "access-abc");
+    localStorage.setItem("p-patch.refresh", "refresh-xyz");
+
+    logout();
+
+    expect(getAccessToken()).toBeNull();
+    expect(getRefreshToken()).toBeNull();
+  });
+});
