@@ -1,20 +1,27 @@
-from django.conf import settings
-from django.core.mail import send_mail
+"""Compatibility wrapper for email delivery.
 
-# TODO: implement logging for email notifications
+The notification system now routes through NotificationService and an injected
+email provider, but this helper remains as a small facade for any existing call
+sites that still expect a standalone function.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+
+from .notification_service import NotificationService
+
+
 def send_email_notification(
-    recipients: list[str],
+    recipients: Sequence[str],
     subject: str,
     message: str,
-) -> int:
+):
+    """Send an email using the default notification service."""
 
-    if not recipients:
-        return 0
-
-    return send_mail(
+    service = NotificationService.from_settings()
+    return service.send_email(
+        recipients=recipients,
         subject=subject,
         message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=recipients,
-        fail_silently=False,
     )

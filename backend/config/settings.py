@@ -108,6 +108,12 @@ DATABASES = {
 
 AUTH_USER_MODEL = "users.User"
 
+# Notification delivery settings are placeholders for now.
+# Deployment-time values will be supplied later through Django settings.
+NOTIFICATIONS_EMAIL_SENDER = None
+NOTIFICATIONS_AWS_REGION = None
+NOTIFICATIONS_RECIPIENTS = ()
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
