@@ -5,31 +5,15 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
-
-try:
-    import boto3
-except ImportError:  # pragma: no cover
-    class _MissingBoto3:
-        def client(self, *args: Any, **kwargs: Any) -> Any:
-            raise ImportError("boto3 is required to use the SES email provider.")
-
-    boto3 = _MissingBoto3()
-
-try:
-    from botocore.exceptions import BotoCoreError, ClientError
-except ImportError:  # pragma: no cover
-    class BotoCoreError(Exception):
-        """Fallback error used when botocore is unavailable."""
-
-    class ClientError(Exception):
-        """Fallback error used when botocore is unavailable."""
 
 from .email_provider import EmailDeliveryError, EmailDeliveryResult, EmailProvider
 
 
 class SESEmailService(EmailProvider):
-    #Email provider backed by AWS SES.
+    """Email provider backed by AWS SES."""
 
     def __init__(
         self,
@@ -40,26 +24,15 @@ class SESEmailService(EmailProvider):
     ) -> None:
         self.sender_email = (
             sender_email
-            or getattr(settings, "NOTIFICATIONS_EMAIL_SENDER", None)
+            or settings.NOTIFICATIONS_EMAIL_SENDER
         )
-
         self.aws_region = (
             aws_region
-            or getattr(settings, "NOTIFICATIONS_AWS_REGION", None)
-            or "us-west-2"
+            or settings.NOTIFICATIONS_AWS_REGION
         )
 
-        resolved_client_factory = client_factory or boto3.client
-
-        try:
-            self._client = resolved_client_factory(
-                "ses",
-                region_name=self.aws_region,
-            )
-        except ImportError as exc:
-            raise EmailDeliveryError(
-                "boto3 is required to use the SES email provider."
-            ) from exc
+        factory = client_factory or boto3.client
+        self._client = factory("ses", region_name=self.aws_region)
 
     @classmethod
     def from_settings(
@@ -67,7 +40,7 @@ class SESEmailService(EmailProvider):
         *,
         client_factory: Callable[..., Any] | None = None,
     ) -> "SESEmailService":
-        """Create an SES provider using the current Django settings."""
+        """Create an SES provider using Django settings."""
 
         return cls(client_factory=client_factory)
 

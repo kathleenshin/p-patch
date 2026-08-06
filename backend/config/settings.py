@@ -114,6 +114,11 @@ AUTH_USER_MODEL = "users.User"
 # Notification delivery
 EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "console")
 
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+
 NOTIFICATIONS_EMAIL_SENDER = os.getenv("DEFAULT_FROM_EMAIL")
 
 NOTIFICATIONS_AWS_REGION = os.getenv(

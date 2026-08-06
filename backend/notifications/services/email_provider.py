@@ -7,17 +7,18 @@ from typing import Any
 
 @dataclass(frozen=True, slots=True)
 class EmailDeliveryResult:
-    # Represents the outcome of a notification email delivery attempt.
+    """Represents the outcome of an email delivery attempt."""
 
     message_id: str | None
     provider_response: dict[str, Any] | None = None
 
 
 class EmailDeliveryError(RuntimeError):
-    # Raised when the configured email provider cannot deliver a message.
-    pass
+    """Raised when an email provider cannot deliver a message."""
+
 
 class EmailProvider(ABC):
+    """Interface implemented by email delivery providers."""
 
     @abstractmethod
     def send_email(
@@ -28,4 +29,6 @@ class EmailProvider(ABC):
         recipients: list[str],
         sender: str | None = None,
     ) -> EmailDeliveryResult:
+        """Send an email through the provider."""
+
         raise NotImplementedError

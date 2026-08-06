@@ -1,23 +1,16 @@
-"""Provider-agnostic notification orchestration.
-
-This module owns notification business rules and knows nothing about boto3,
-AWS credentials, IAM policies, or deployment plumbing. Those concerns stay in
-the SES provider implementation so the application can swap providers later
-without rewriting notification logic.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence
 
 from django.conf import settings
 
+from .console_email import ConsoleEmailService
 from .email_provider import EmailDeliveryError, EmailDeliveryResult, EmailProvider
 from .ses_email import SESEmailService
 
 
 class NotificationService:
-    """High-level notification service that depends on an email provider."""
+    """Coordinates email notifications through a configured provider."""
 
     def __init__(
         self,
@@ -27,11 +20,15 @@ class NotificationService:
         default_recipients: Sequence[str] | None = None,
     ) -> None:
         self.email_provider = email_provider
-        self.sender_email = sender_email or getattr(settings, "NOTIFICATIONS_EMAIL_SENDER", None)
+        self.sender_email = (
+            sender_email
+            or settings.NOTIFICATIONS_EMAIL_SENDER
+        )
+
         configured_recipients = (
             default_recipients
             if default_recipients is not None
-            else getattr(settings, "NOTIFICATIONS_RECIPIENTS", ())
+            else settings.NOTIFICATIONS_RECIPIENTS
         )
         self.default_recipients = tuple(configured_recipients)
 
@@ -43,13 +40,28 @@ class NotificationService:
         sender_email: str | None = None,
         default_recipients: Sequence[str] | None = None,
     ) -> "NotificationService":
-        """Build a notification service from Django settings placeholders."""
+        """Build a notification service from Django settings."""
 
-        provider = email_provider or SESEmailService.from_settings()
+        provider = email_provider or cls._provider_from_settings()
+
         return cls(
             provider,
             sender_email=sender_email,
             default_recipients=default_recipients,
+        )
+
+    @staticmethod
+    def _provider_from_settings() -> EmailProvider:
+        provider_name = settings.EMAIL_PROVIDER.lower()
+
+        if provider_name == "console":
+            return ConsoleEmailService.from_settings()
+
+        if provider_name == "ses":
+            return SESEmailService.from_settings()
+
+        raise ValueError(
+            f"Unsupported email provider: {settings.EMAIL_PROVIDER}"
         )
 
     def send_email(
@@ -61,12 +73,16 @@ class NotificationService:
         sender: str | None = None,
     ) -> EmailDeliveryResult:
         resolved_sender = sender or self.sender_email
+
         if not resolved_sender:
             raise EmailDeliveryError("Sender email is not configured.")
 
         resolved_recipients = list(
-            self.default_recipients if recipients is None else recipients,
+            self.default_recipients
+            if recipients is None
+            else recipients
         )
+
         if not resolved_recipients:
             return EmailDeliveryResult(
                 message_id=None,

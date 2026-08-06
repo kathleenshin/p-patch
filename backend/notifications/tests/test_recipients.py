@@ -1,0 +1,83 @@
+from django.test import TestCase
+
+from notifications.services.recipients import (
+    get_active_garden_member_emails,
+)
+from notifications.tests.fixtures import (
+    create_garden,
+    create_membership,
+    create_user,
+)
+
+
+class GetActiveGardenMemberEmailsTests(TestCase):
+    def setUp(self):
+        self.garden = create_garden()
+
+    def test_returns_only_active_approved_members_with_email(self):
+        active_user = create_user(
+            username="active-user",
+            email="active@example.com",
+        )
+        inactive_user = create_user(
+            username="inactive-user",
+            email="inactive@example.com",
+        )
+        unapproved_user = create_user(
+            username="unapproved-user",
+            email="unapproved@example.com",
+            is_approved=False,
+        )
+        missing_email_user = create_user(
+            username="missing-email-user",
+            email="temporary@example.com",
+        )
+        missing_email_user.email = ""
+        missing_email_user.save(update_fields=["email"])
+
+        create_membership(
+            garden=self.garden,
+            user=active_user,
+            status="active",
+        )
+        create_membership(
+            garden=self.garden,
+            user=inactive_user,
+            status="inactive",
+        )
+        create_membership(
+            garden=self.garden,
+            user=unapproved_user,
+            status="active",
+        )
+        create_membership(
+            garden=self.garden,
+            user=missing_email_user,
+            status="active",
+        )
+
+        emails = get_active_garden_member_emails(
+            self.garden,
+        )
+
+        self.assertEqual(
+            emails,
+            ["active@example.com"],
+        )
+
+    def test_returns_empty_list_when_no_members_are_eligible(self):
+        user = create_user(
+            username="pending-user",
+            email="pending@example.com",
+        )
+        create_membership(
+            garden=self.garden,
+            user=user,
+            status="pending",
+        )
+
+        emails = get_active_garden_member_emails(
+            self.garden,
+        )
+
+        self.assertEqual(emails, [])

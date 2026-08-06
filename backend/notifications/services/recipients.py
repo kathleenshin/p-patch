@@ -1,16 +1,15 @@
-def get_active_garden_member_emails(garden) -> list[str]:
-    # Return email addresses for active, approved garden members
+from plots.models import Garden
 
-    emails = []
 
-    for membership in garden.memberships.all():
-        user = membership.user
+def get_active_garden_member_emails(garden: Garden) -> list[str]:
+    """Return emails for active, approved garden members."""
 
-        if (
-            membership.status == "active"
-            and user.is_approved
-            and user.email
-        ):
-            emails.append(user.email)
-
-    return emails
+    return list(
+        garden.memberships.filter(
+            status="active",
+            user__is_approved=True,
+        )
+        .exclude(user__email="")
+        .values_list("user__email", flat=True)
+        .distinct()
+    )
