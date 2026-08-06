@@ -8,6 +8,12 @@ from .models import User
 from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
 
 
+class UserListView(generics.ListAPIView):
+    queryset = User.objects.order_by("email")
+    serializer_class = UserSerializer
+    permission_classes = [permissions.AllowAny]
+
+
 def tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
     return {
