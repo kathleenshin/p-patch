@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from plots.models import Garden, Plot
+from plots.models import Garden, Plot, PlotNote
 
 
 User = get_user_model()
@@ -62,6 +62,7 @@ class BasePlotAPITestCase(BasePlotTestCase):
     def setUpTestData(cls):
         super().setUpTestData()
 
+        # Plot API fixtures
         cls.plot_list_create_url = reverse("plot-list-create")
         cls.plot_detail_url = reverse(
             "plot-detail",
@@ -72,10 +73,33 @@ class BasePlotAPITestCase(BasePlotTestCase):
             kwargs={"pk": 999999},
         )
 
+        # PlotNote API fixtures
+        cls.note = PlotNote.objects.create(
+            plot=cls.plot,
+            author=cls.user_one,
+            content="Tomatoes were watered.",
+            visibility="this_plot",
+        )
+
+        cls.plot_note_list_create_url = reverse(
+            "plot-note-list-create"
+        )
+
+        cls.plot_note_detail_url = reverse(
+            "plot-note-detail",
+            kwargs={"pk": cls.note.pk},
+        )
+
+        cls.unknown_plot_note_detail_url = reverse(
+            "plot-note-detail",
+            kwargs={"pk": 999999},
+        )
+
     def setUp(self):
         self.client = APIClient()
         self.client.force_authenticate(user=self.user_one)
 
+        # Plot API payloads
         self.create_plot_payload = {
             "garden": self.garden.id,
             "plot_number": "2",
@@ -92,4 +116,17 @@ class BasePlotAPITestCase(BasePlotTestCase):
             "garden": self.other_garden.id,
             "plot_number": "1",
             "is_active": True,
+        }
+
+        # PlotNote API payloads
+        self.create_plot_note_payload = {
+            "plot": self.plot.id,
+            "content": "The beans need support.",
+            "visibility": "garden_members",
+        }
+
+        self.invalid_visibility_payload = {
+            "plot": self.plot.id,
+            "content": "Invalid visibility test.",
+            "visibility": "not_a_real_choice",
         }
