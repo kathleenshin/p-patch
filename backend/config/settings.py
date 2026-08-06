@@ -126,12 +126,6 @@ NOTIFICATIONS_AWS_REGION = os.getenv(
     "us-west-2",
 )
 
-NOTIFICATIONS_RECIPIENTS = tuple(
-    email.strip()
-    for email in os.getenv("NOTIFICATIONS_RECIPIENTS", "").split(",")
-    if email.strip()
-)
-
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 

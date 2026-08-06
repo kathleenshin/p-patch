@@ -13,7 +13,6 @@ from notifications.services.notification_service import (
 
 @override_settings(
     NOTIFICATIONS_EMAIL_SENDER="sender@example.com",
-    NOTIFICATIONS_RECIPIENTS=(),
 )
 class NotificationServiceTests(SimpleTestCase):
     def test_delegates_to_email_provider(self):
@@ -40,42 +39,9 @@ class NotificationServiceTests(SimpleTestCase):
             message="Test message",
         )
 
-    def test_uses_default_recipients_when_recipients_are_none(self):
-        provider = Mock()
-        provider.send_email.return_value = EmailDeliveryResult(
-            message_id="message-123",
-        )
-
-        service = NotificationService(
-            provider,
-            default_recipients=(
-                "default1@example.com",
-                "default2@example.com",
-            ),
-        )
-
-        service.send_email(
-            subject="Test subject",
-            message="Test message",
-        )
-
-        provider.send_email.assert_called_once_with(
-            sender="sender@example.com",
-            recipients=[
-                "default1@example.com",
-                "default2@example.com",
-            ],
-            subject="Test subject",
-            message="Test message",
-        )
-
     def test_explicit_empty_recipient_list_skips_delivery(self):
         provider = Mock()
-
-        service = NotificationService(
-            provider,
-            default_recipients=("default@example.com",),
-        )
+        service = NotificationService(provider)
 
         result = service.send_email(
             recipients=[],
@@ -97,6 +63,7 @@ class NotificationServiceTests(SimpleTestCase):
         provider.send_email.return_value = EmailDeliveryResult(
             message_id="message-123",
         )
+
         service = NotificationService(provider)
 
         service.send_email(
@@ -106,9 +73,11 @@ class NotificationServiceTests(SimpleTestCase):
             message="Test message",
         )
 
-        self.assertEqual(
-            provider.send_email.call_args.kwargs["sender"],
-            "override@example.com",
+        provider.send_email.assert_called_once_with(
+            sender="override@example.com",
+            recipients=["recipient@example.com"],
+            subject="Test subject",
+            message="Test message",
         )
 
     @override_settings(NOTIFICATIONS_EMAIL_SENDER=None)

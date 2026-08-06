@@ -17,7 +17,6 @@ class NotificationService:
         email_provider: EmailProvider,
         *,
         sender_email: str | None = None,
-        default_recipients: Sequence[str] | None = None,
     ) -> None:
         self.email_provider = email_provider
         self.sender_email = (
@@ -25,20 +24,12 @@ class NotificationService:
             or settings.NOTIFICATIONS_EMAIL_SENDER
         )
 
-        configured_recipients = (
-            default_recipients
-            if default_recipients is not None
-            else settings.NOTIFICATIONS_RECIPIENTS
-        )
-        self.default_recipients = tuple(configured_recipients)
-
     @classmethod
     def from_settings(
         cls,
         *,
         email_provider: EmailProvider | None = None,
         sender_email: str | None = None,
-        default_recipients: Sequence[str] | None = None,
     ) -> "NotificationService":
         """Build a notification service from Django settings."""
 
@@ -47,7 +38,6 @@ class NotificationService:
         return cls(
             provider,
             sender_email=sender_email,
-            default_recipients=default_recipients,
         )
 
     @staticmethod
@@ -77,11 +67,7 @@ class NotificationService:
         if not resolved_sender:
             raise EmailDeliveryError("Sender email is not configured.")
 
-        resolved_recipients = list(
-            self.default_recipients
-            if recipients is None
-            else recipients
-        )
+        resolved_recipients = list(recipients or [])
 
         if not resolved_recipients:
             return EmailDeliveryResult(
