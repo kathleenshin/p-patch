@@ -1,7 +1,9 @@
 from django.conf import settings
-from django.core.mail import send_mail
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
+
+# Shared outbound mail path (SES/console); keep auth off raw send_mail.
+from notifications.services.email import send_email_notification
 
 from .tokens import email_confirmation_token
 
@@ -14,7 +16,7 @@ def build_confirmation_link(user) -> str:
 
 
 def send_confirmation_email(user) -> int:
-    """Send the verify-registration email via Django's email backend (SES in prod)."""
+    """Build confirm content in auth; deliver via notifications (SES-ready)."""
     link = build_confirmation_link(user)
     subject = "Confirm your Judkins Park P-Patch account"
     message = (
@@ -23,10 +25,9 @@ def send_confirmation_email(user) -> int:
         f"{link}\n\n"
         "If you did not create an account, you can ignore this message."
     )
-    return send_mail(
+    # Hand off delivery so SES config stays centralized in notifications.
+    return send_email_notification(
+        recipients=[user.email],
         subject=subject,
         message=message,
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[user.email],
-        fail_silently=False,
     )
