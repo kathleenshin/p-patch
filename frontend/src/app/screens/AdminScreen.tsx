@@ -1,26 +1,135 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
   Users, LayoutGrid, ClipboardList, Archive, AlertTriangle,
   ChevronRight, Plus, Check, Newspaper, Package,
 } from "lucide-react";
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import type { Screen } from "../types";
+import { useAuth } from "../auth/AuthContext";
+import {
+  approveUser,
+  fetchPendingUsers,
+  rejectUser,
+} from "@/lib/adminApi";
+import type { AuthUser } from "@/lib/authApi";
+import { ApiError } from "@/lib/api";
+
+const AVATAR_COLORS = [C.terra, C.sage, C.amber, C.lavender, C.sky];
+
+/** Prefer full name; fall back to email for incomplete profiles. */
+function displayName(user: AuthUser): string {
+  const full = `${user.first_name} ${user.last_name}`.trim();
+  return full || user.email;
+}
+
+function initialsFor(user: AuthUser): string {
+  const first = user.first_name?.[0];
+  const last = user.last_name?.[0];
+  if (first && last) return `${first}${last}`.toUpperCase();
+  if (first) return first.toUpperCase();
+  return (user.email?.[0] || "?").toUpperCase();
+}
+
+function formatJoined(dateJoined?: string): string {
+  if (!dateJoined) return "";
+  const date = new Date(dateJoined);
+  if (Number.isNaN(date.getTime())) return dateJoined;
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
 
 export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { accessToken } = useAuth();
   const [showAnnForm, setShowAnnForm] = useState(false);
   const [annText, setAnnText] = useState("");
 
+  // Live pending registrations (other Admin panels stay mock for now).
+  const [pendingUsers, setPendingUsers] = useState<AuthUser[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(true);
+  const [pendingError, setPendingError] = useState<string | null>(null);
+  const [actionUserId, setActionUserId] = useState<number | null>(null);
+
+  const loadPending = useCallback(async () => {
+    if (!accessToken) {
+      setPendingUsers([]);
+      setPendingLoading(false);
+      return;
+    }
+    setPendingLoading(true);
+    setPendingError(null);
+    try {
+      const users = await fetchPendingUsers(accessToken);
+      setPendingUsers(users);
+    } catch (err) {
+      setPendingUsers([]);
+      setPendingError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Could not load pending registrations.",
+      );
+    } finally {
+      setPendingLoading(false);
+    }
+  }, [accessToken]);
+
+  useEffect(() => {
+    void loadPending();
+  }, [loadPending]);
+
+  /** Approve then refresh the pending list. */
+  async function handleApprove(userId: number) {
+    if (!accessToken) return;
+    setActionUserId(userId);
+    setPendingError(null);
+    try {
+      await approveUser(accessToken, userId);
+      await loadPending();
+    } catch (err) {
+      setPendingError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Approve failed.",
+      );
+    } finally {
+      setActionUserId(null);
+    }
+  }
+
+  /** Reject (delete signup) then refresh the pending list. */
+  async function handleReject(userId: number) {
+    if (!accessToken) return;
+    setActionUserId(userId);
+    setPendingError(null);
+    try {
+      await rejectUser(accessToken, userId);
+      await loadPending();
+    } catch (err) {
+      setPendingError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Reject failed.",
+      );
+    } finally {
+      setActionUserId(null);
+    }
+  }
+
   const statCards = [
-    { label: "Pending Registrations", value: 2, color: C.terra,    Icon: Users,         action: () => {} },
+    // First card reflects the live pending queue length.
+    { label: "Pending Registrations", value: pendingUsers.length, color: C.terra,    Icon: Users,         action: () => {} },
     { label: "Unassigned Plots",       value: 3, color: C.amber,   Icon: LayoutGrid,    action: () => setScreen("plot") },
     { label: "Unclaimed Tasks",        value: 2, color: C.lavender, Icon: ClipboardList, action: () => setScreen("tasks") },
     { label: "Inventory Alerts",       value: 1, color: C.sky,     Icon: Archive,       action: () => setScreen("inventory") },
     { label: "Flagged Content",        value: 0, color: C.sage,    Icon: AlertTriangle, action: () => {} },
-  ];
-
-  const pendingRegs = [
-    { name: "John Smith",    date: "May 7, 2025",  initials: "JS", color: C.terra },
-    { name: "Kate Williams", date: "May 11, 2025", initials: "KW", color: C.sage  },
   ];
 
   const unassignedPlots = [
@@ -134,32 +243,71 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         {/* 2x2 panel grid */}
         <div className="admin-panel-grid" style={{ marginBottom: "0.875rem" }}>
 
+        {/* Live pending queue from GET /api/auth/pending/ */}
           {panel("Pending Registrations", <Users size={13} color={C.sage} />, viewAll(), (
             <div>
-              {pendingRegs.map((r, i) => (
-                <div key={r.name} style={{ display: "flex", alignItems: "center",
-                  gap: "0.625rem", padding: "0.6875rem 1rem",
-                  borderBottom: i < pendingRegs.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-                  <div style={{ width: "2rem", height: "2rem", borderRadius: "50%",
-                    background: r.color, flexShrink: 0,
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    color: C.white, fontWeight: 800, fontSize: "0.64rem" }}>
-                    {r.initials}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>{r.name}</div>
-                    <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>{r.date}</div>
-                  </div>
-                  <div style={{ display: "flex", gap: "0.375rem" }}>
-                    <button style={{ background: C.sageLight, color: C.sageDark, border: "none",
-                      borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
-                      cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>Approve</button>
-                    <button style={{ background: C.terraLight, color: C.terra, border: "none",
-                      borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
-                      cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>Reject</button>
-                  </div>
+              {pendingLoading && (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+                  Loading pending registrations…
                 </div>
-              ))}
+              )}
+              {!pendingLoading && pendingError && (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.terra, fontWeight: 600 }}>
+                  {pendingError}
+                </div>
+              )}
+              {!pendingLoading && !pendingError && pendingUsers.length === 0 && (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+                  No pending registrations.
+                </div>
+              )}
+              {!pendingLoading && pendingUsers.map((user, i) => {
+                const color = AVATAR_COLORS[user.id % AVATAR_COLORS.length];
+                const busy = actionUserId === user.id;
+                return (
+                  <div key={user.id} style={{ display: "flex", alignItems: "center",
+                    gap: "0.625rem", padding: "0.6875rem 1rem",
+                    borderBottom: i < pendingUsers.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
+                    <div style={{ width: "2rem", height: "2rem", borderRadius: "50%",
+                      background: color, flexShrink: 0,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      color: C.white, fontWeight: 800, fontSize: "0.64rem" }}>
+                      {initialsFor(user)}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
+                        {displayName(user)}
+                      </div>
+                      <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>
+                        {user.email}
+                        {user.date_joined ? ` · ${formatJoined(user.date_joined)}` : ""}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", gap: "0.375rem" }}>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleApprove(user.id)}
+                        style={{ background: C.sageLight, color: C.sageDark, border: "none",
+                          borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
+                          cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1,
+                          fontFamily: "'Nunito', sans-serif" }}>
+                        Approve
+                      </button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void handleReject(user.id)}
+                        style={{ background: C.terraLight, color: C.terra, border: "none",
+                          borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
+                          cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1,
+                          fontFamily: "'Nunito', sans-serif" }}>
+                        Reject
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ))}
 
