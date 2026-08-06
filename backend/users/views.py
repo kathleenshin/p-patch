@@ -10,9 +10,10 @@ from .permissions import IsGardenAdmin
 
 
 class UserListView(generics.ListAPIView):
+    # Emails/roles are not public — garden admins only.
     queryset = User.objects.order_by("email")
     serializer_class = UserSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsGardenAdmin]
 
 
 def tokens_for_user(user):
@@ -57,6 +58,8 @@ class LoginView(APIView):
 
 
 class MeView(generics.RetrieveAPIView):
+    # Pending users must reach /me so the UI can read is_approved.
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = UserSerializer
 
     def get_object(self):
