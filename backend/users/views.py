@@ -9,6 +9,12 @@ from .serializers import LoginSerializer, RegisterSerializer, UserSerializer
 from .permissions import IsGardenAdmin
 
 
+class UserListView(generics.ListAPIView):
+    queryset = User.objects.order_by("email")
+    serializer_class = UserSerializer
+    permission_classes = [permissions.AllowAny]
+
+
 def tokens_for_user(user):
     refresh = RefreshToken.for_user(user)
     return {
