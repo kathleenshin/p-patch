@@ -79,19 +79,20 @@ class AuthApiTests(APITestCase):
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
 
-    def test_register_creates_user_and_returns_tokens(self):
+    def test_register_creates_inactive_user_without_tokens(self):
         response = self.post_register(full_name=self.FULL_NAME)
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assert_token_pair_returned(response)
-        self.assertEqual(response.data["user"]["email"], self.USER_EMAIL)
-        self.assertFalse(response.data["user"]["is_approved"])
+        self.assertNotIn("access", response.data)
+        self.assertNotIn("refresh", response.data)
+        self.assertEqual(response.data["email"], self.USER_EMAIL)
 
         user = User.objects.get(email=self.USER_EMAIL)
         self.assertEqual(user.username, self.USER_EMAIL)
         self.assertEqual(user.first_name, self.FIRST_NAME)
         self.assertEqual(user.last_name, self.LAST_NAME)
         self.assertFalse(user.is_approved)
+        self.assertFalse(user.is_active)
 
     def test_register_duplicate_email_returns_400(self):
         self.create_user(is_approved=True)

@@ -19,6 +19,34 @@ export class ApiError extends Error {
   }
 }
 
+/** Turn DRF error JSON (`detail` or field maps) into one user-facing string. */
+function messageFromApiErrorBody(data: unknown, status: number): string {
+  if (typeof data === "string" && data.trim()) return data;
+  if (typeof data !== "object" || data === null) {
+    return `Request failed with status ${status}`;
+  }
+
+  const record = data as Record<string, unknown>;
+
+  if (typeof record.detail === "string") return record.detail;
+  if (Array.isArray(record.detail)) {
+    return record.detail.map(String).join(" ");
+  }
+
+  const fieldMessages: string[] = [];
+  for (const [field, value] of Object.entries(record)) {
+    if (field === "detail") continue;
+    if (Array.isArray(value)) {
+      fieldMessages.push(`${field}: ${value.map(String).join(" ")}`);
+    } else if (typeof value === "string") {
+      fieldMessages.push(`${field}: ${value}`);
+    }
+  }
+  if (fieldMessages.length > 0) return fieldMessages.join(" ");
+
+  return `Request failed with status ${status}`;
+}
+
 /** fetch options plus optional Bearer token and JSON body helpers. */
 type ApiFetchOptions = Omit<RequestInit, "body"> & {
   token?: string | null;
@@ -69,16 +97,8 @@ export async function apiFetch<T>(
     }
   }
 
-  // Prefer DRF's `detail` string when present.
   if (!response.ok) {
-    const detail =
-      typeof data === "object" &&
-      data !== null &&
-      "detail" in data &&
-      typeof (data as { detail: unknown }).detail === "string"
-        ? (data as { detail: string }).detail
-        : `Request failed with status ${response.status}`;
-    throw new ApiError(detail, response.status, data);
+    throw new ApiError(messageFromApiErrorBody(data, response.status), response.status, data);
   }
 
   return data as T;

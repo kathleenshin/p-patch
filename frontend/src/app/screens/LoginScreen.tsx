@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { C, serif, sans, mono, inputStyle, linkStyle, labelStyle } from "../theme";
 import { gardenFacts } from "../data/gardenFacts";
@@ -6,13 +6,16 @@ import { DoodleLeaf } from "../components/DoodleLeaf";
 import gardenPhoto from "../../imports/gardening_plots_growing_veggies_vivid.jpg";
 import { useAuth, ApiError } from "../auth/AuthContext";
 
+const RESEND_COOLDOWN_SECONDS = 60;
+
 /**
  * Login / register UI.
- * Controlled fields call AuthContext login/register; on success `onLogin`
- * navigates into the app. API errors (including 403 pending approval) stay on this screen.
+ * Register sends a confirmation email and stays on this screen until the user
+ * verifies. Confirm links (`?confirm_email=1&uid=&token=`) auto-complete here.
+ * Resend is only shown after register or an unconfirmed-login attempt.
  */
 export function LoginScreen({ onLogin }: { onLogin: () => void }) {
-  const { login, register } = useAuth();
+  const { login, register, confirmEmail, resendConfirmation } = useAuth();
 
   // UI chrome state
   const [showPw, setShowPw] = useState(false);
@@ -24,24 +27,91 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /** Set after register or unconfirmed login — unlocks the resend control. */
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const id = window.setTimeout(() => setResendCooldown((s) => s - 1), 1000);
+    return () => window.clearTimeout(id);
+  }, [resendCooldown]);
+
+  // Handle confirmation links from the verification email.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("confirm_email") !== "1") return;
+
+    const uid = params.get("uid");
+    const token = params.get("token");
+    if (!uid || !token) {
+      setError("This confirmation link is missing information.");
+      return;
+    }
+
+    let cancelled = false;
+    async function runConfirm() {
+      setLoading(true);
+      setError(null);
+      try {
+        await confirmEmail(uid!, token!);
+        // Drop query params so a refresh does not re-post confirm.
+        window.history.replaceState({}, "", window.location.pathname);
+        if (!cancelled) onLogin();
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof ApiError) {
+          setError(err.message);
+        } else if (err instanceof Error) {
+          setError(err.message);
+        } else {
+          setError("Could not confirm your email. Please try again.");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void runConfirm();
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmEmail, onLogin]);
+
+  function startResendCooldown() {
+    setResendCooldown(RESEND_COOLDOWN_SECONDS);
+  }
 
   /** Submit login or register against the Django auth API. */
   async function handleSubmit() {
     setError(null);
+    setInfo(null);
     setLoading(true);
     try {
       if (tab === "login") {
         await login(email.trim(), password);
+        setPendingEmail(null);
+        onLogin();
       } else {
-        await register(email.trim(), password, fullName.trim());
+        const result = await register(email.trim(), password, fullName.trim());
+        setPendingEmail(result.email);
+        setInfo(result.detail);
+        setPassword("");
+        startResendCooldown();
       }
-      // Parent switches to dashboard after tokens/user are stored in context.
-      onLogin();
     } catch (err) {
-      // Surface API error messages (validation, bad credentials, etc.).
       if (err instanceof ApiError) {
         setError(err.message);
+        // Only offer resend after a real "confirm your email" login failure.
+        if (
+          tab === "login" &&
+          err.status === 403 &&
+          err.message.toLowerCase().includes("confirm your email")
+        ) {
+          setPendingEmail(email.trim());
+        }
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -51,6 +121,29 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
       setLoading(false);
     }
   }
+
+  async function handleResend() {
+    if (!pendingEmail || resendCooldown > 0) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const detail = await resendConfirmation(pendingEmail);
+      setInfo(detail);
+      startResendCooldown();
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.message);
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Could not resend confirmation email.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const showResend = Boolean(pendingEmail);
 
   return (
     <div className="login-shell" style={{ ...sans }}>
@@ -106,7 +199,11 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
           <div style={{ display: "flex", background: C.creamDark, borderRadius: "0.875rem",
             padding: "0.25rem", marginBottom: "1.375rem", gap: "0.25rem" }}>
             {(["login", "register"] as const).map((t) => (
-              <button key={t} type="button" onClick={() => { setTab(t); setError(null); }}
+              <button key={t} type="button" onClick={() => {
+                setTab(t);
+                setError(null);
+                setInfo(null);
+              }}
                 style={{ flex: 1, padding: "0.5625rem", borderRadius: "0.6875rem", border: "none",
                   cursor: "pointer", background: tab === t ? C.white : "transparent",
                   color: tab === t ? C.brown : C.muted, fontWeight: tab === t ? 800 : 500,
@@ -163,14 +260,17 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
               </div>
             </div>
 
-            {/* API / validation error message */}
             {error && (
               <p style={{ margin: 0, color: C.terra, fontSize: "0.8rem", fontWeight: 600 }}>
                 {error}
               </p>
             )}
+            {info && (
+              <p style={{ margin: 0, color: C.sageDark, fontSize: "0.8rem", fontWeight: 600 }}>
+                {info}
+              </p>
+            )}
 
-            {/* Primary submit — disabled while request is in flight or fields empty */}
             <button
               type="button"
               onClick={() => void handleSubmit()}
@@ -187,6 +287,24 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
                 ? (tab === "login" ? "Logging in…" : "Creating account…")
                 : (tab === "login" ? "Login →" : "Create Account →")}
             </button>
+
+            {showResend && (
+              <button
+                type="button"
+                onClick={() => void handleResend()}
+                disabled={loading || resendCooldown > 0}
+                style={{
+                  ...linkStyle,
+                  color: resendCooldown > 0 ? C.muted : C.terra,
+                  fontWeight: 700,
+                  alignSelf: "center",
+                  cursor: loading || resendCooldown > 0 ? "default" : "pointer",
+                }}>
+                {resendCooldown > 0
+                  ? `Resend available in ${resendCooldown}s`
+                  : "Resend confirmation email"}
+              </button>
+            )}
           </div>
 
           {/* Secondary links between login and register tabs */}
@@ -196,14 +314,14 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
                 <button type="button" style={linkStyle}>Forgot Password?</button>
                 <div style={{ marginTop: "0.4375rem" }}>
                   No account?{" "}
-                  <button type="button" onClick={() => { setTab("register"); setError(null); }}
+                  <button type="button" onClick={() => { setTab("register"); setError(null); setInfo(null); }}
                     style={{ ...linkStyle, color: C.terra, fontWeight: 800 }}>Register</button>
                 </div>
               </>
             ) : (
               <div>
                 Already a member?{" "}
-                <button type="button" onClick={() => { setTab("login"); setError(null); }}
+                <button type="button" onClick={() => { setTab("login"); setError(null); setInfo(null); }}
                   style={{ ...linkStyle, color: C.terra, fontWeight: 800 }}>Login</button>
               </div>
             )}
