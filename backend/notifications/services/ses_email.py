@@ -1,11 +1,4 @@
-"""AWS SES email provider.
-
-This module intentionally contains the AWS-specific implementation details and
-keeps them separate from notification business logic. Deployment-time concerns
-such as IAM permissions, verified sender identities, region selection,
-environment variables, and AWS credentials are expected to be wired in later
-through Django settings and the deployment environment.
-"""
+"""AWS SES email provider."""
 
 from __future__ import annotations
 
@@ -14,34 +7,29 @@ from typing import Any
 
 from django.conf import settings
 
-try:  # pragma: no cover - used when boto3 is installed in the environment.
+try:
     import boto3
-except ImportError:  # pragma: no cover - keeps the module importable in tests.
+except ImportError:  # pragma: no cover
     class _MissingBoto3:
         def client(self, *args: Any, **kwargs: Any) -> Any:
             raise ImportError("boto3 is required to use the SES email provider.")
 
     boto3 = _MissingBoto3()
 
-try:  # pragma: no cover - used when botocore is installed.
+try:
     from botocore.exceptions import BotoCoreError, ClientError
-except ImportError:  # pragma: no cover - keeps the module importable in tests.
+except ImportError:  # pragma: no cover
     class BotoCoreError(Exception):
-        """Fallback boto core error used when botocore is unavailable."""
+        """Fallback error used when botocore is unavailable."""
 
     class ClientError(Exception):
-        """Fallback client error used when botocore is unavailable."""
+        """Fallback error used when botocore is unavailable."""
 
 from .email_provider import EmailDeliveryError, EmailDeliveryResult, EmailProvider
 
 
 class SESEmailService(EmailProvider):
-    """Email provider backed by AWS SES.
-
-    The service accepts optional overrides so tests can inject a mocked client
-    factory without touching AWS. Real deployments should provide sender and
-    region configuration through Django settings.
-    """
+    #Email provider backed by AWS SES.
 
     def __init__(
         self,
@@ -50,10 +38,28 @@ class SESEmailService(EmailProvider):
         aws_region: str | None = None,
         client_factory: Callable[..., Any] | None = None,
     ) -> None:
-        client_factory = client_factory or boto3.client
-        self.sender_email = sender_email or getattr(settings, "NOTIFICATIONS_EMAIL_SENDER", None)
-        self.aws_region = aws_region or getattr(settings, "NOTIFICATIONS_AWS_REGION", None)
-        self._client = client_factory("ses", region_name=self.aws_region)
+        self.sender_email = (
+            sender_email
+            or getattr(settings, "NOTIFICATIONS_EMAIL_SENDER", None)
+        )
+
+        self.aws_region = (
+            aws_region
+            or getattr(settings, "NOTIFICATIONS_AWS_REGION", None)
+            or "us-west-2"
+        )
+
+        resolved_client_factory = client_factory or boto3.client
+
+        try:
+            self._client = resolved_client_factory(
+                "ses",
+                region_name=self.aws_region,
+            )
+        except ImportError as exc:
+            raise EmailDeliveryError(
+                "boto3 is required to use the SES email provider."
+            ) from exc
 
     @classmethod
     def from_settings(
@@ -92,14 +98,22 @@ class SESEmailService(EmailProvider):
                 Source=resolved_sender,
                 Destination={"ToAddresses": recipients},
                 Message={
-                    "Subject": {"Data": subject, "Charset": "UTF-8"},
+                    "Subject": {
+                        "Data": subject,
+                        "Charset": "UTF-8",
+                    },
                     "Body": {
-                        "Text": {"Data": message, "Charset": "UTF-8"},
+                        "Text": {
+                            "Data": message,
+                            "Charset": "UTF-8",
+                        },
                     },
                 },
             )
         except (BotoCoreError, ClientError) as exc:
-            raise EmailDeliveryError("SES could not deliver the email.") from exc
+            raise EmailDeliveryError(
+                "SES could not deliver the email."
+            ) from exc
 
         return EmailDeliveryResult(
             message_id=response.get("MessageId"),

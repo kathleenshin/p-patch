@@ -11,9 +11,11 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
-from dotenv import load_dotenv
+from datetime import timedelta
 from pathlib import Path
+
 import dj_database_url
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -109,11 +111,21 @@ DATABASES = {
 
 AUTH_USER_MODEL = "users.User"
 
-# Notification delivery settings are placeholders for now.
-# Deployment-time values will be supplied later through Django settings.
-NOTIFICATIONS_EMAIL_SENDER = None
-NOTIFICATIONS_AWS_REGION = None
-NOTIFICATIONS_RECIPIENTS = ()
+# Notification delivery
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "console")
+
+NOTIFICATIONS_EMAIL_SENDER = os.getenv("DEFAULT_FROM_EMAIL")
+
+NOTIFICATIONS_AWS_REGION = os.getenv(
+    "AWS_SES_REGION",
+    "us-west-2",
+)
+
+NOTIFICATIONS_RECIPIENTS = tuple(
+    email.strip()
+    for email in os.getenv("NOTIFICATIONS_RECIPIENTS", "").split(",")
+    if email.strip()
+)
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -179,8 +191,6 @@ REST_FRAMEWORK = {
         "rest_framework.permissions.IsAuthenticated",
     ),
 }
-
-from datetime import timedelta
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
