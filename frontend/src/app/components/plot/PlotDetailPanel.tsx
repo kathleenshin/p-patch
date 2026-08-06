@@ -3,14 +3,24 @@ import { C, mono, serif } from "../../theme";
 import { PlantIcon } from "../PlantIcon";
 import { plotColors, type PlotInfo } from "./types";
 
-export function PlotDetailPanel({ plot, colByState, onClose, onNavigate }: {
+export function PlotDetailPanel({
+  plot,
+  colByState,
+  onClose,
+  onNavigate,
+  hideOwnerNames = false,
+}: {
   plot: PlotInfo;
   colByState: typeof plotColors;
   onClose: () => void;
   onNavigate: () => void;
+  hideOwnerNames?: boolean;
 }) {
   const col    = colByState[plot.state];
   const isMine = plot.state === "mine";
+  // Full owner block vs zone/crops only (pending) vs unassigned copy.
+  const showOwner = !hideOwnerNames && Boolean(plot.owner);
+
   return (
     <div className="plot-map-detail">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
@@ -37,7 +47,7 @@ export function PlotDetailPanel({ plot, colByState, onClose, onNavigate }: {
         </span>
       </div>
 
-      {plot.owner ? (
+      {showOwner ? (
         <>
           <div>
             <div style={{ fontSize: "0.62rem", color: C.muted,
@@ -50,6 +60,31 @@ export function PlotDetailPanel({ plot, colByState, onClose, onNavigate }: {
               </div>
             )}
           </div>
+          <div>
+            <div style={{ fontSize: "0.62rem", color: C.muted,
+              textTransform: "uppercase", letterSpacing: "0.05em", ...mono }}>Zone</div>
+            <div style={{ fontSize: "0.78rem", color: C.brownMid, marginTop: "0.125rem" }}>
+              {plot.section}
+            </div>
+          </div>
+          {plot.crops && plot.crops.length > 0 && (
+            <div>
+              <div style={{ fontSize: "0.62rem", color: C.muted,
+                textTransform: "uppercase", letterSpacing: "0.05em", ...mono,
+                marginBottom: "0.3125rem" }}>Growing</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem" }}>
+                {plot.crops.map(c => (
+                  <span key={c} style={{ background: C.sagePop, color: C.sageDark,
+                    fontSize: "0.64rem", padding: "0.125rem 0.5rem", borderRadius: "1.25rem",
+                    fontWeight: 700 }}>{c}</span>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      ) : plot.owner && hideOwnerNames ? (
+        // Pending: keep zone/crops, omit owner name / member-since.
+        <>
           <div>
             <div style={{ fontSize: "0.62rem", color: C.muted,
               textTransform: "uppercase", letterSpacing: "0.05em", ...mono }}>Zone</div>

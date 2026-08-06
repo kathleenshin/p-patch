@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { AuthProvider, useAuth } from "@/app/auth/AuthContext";
+import { AuthProvider, useAuth } from "../src/app/auth/AuthContext";
 
 const fetchMeMock = vi.fn();
 const apiLoginMock = vi.fn();

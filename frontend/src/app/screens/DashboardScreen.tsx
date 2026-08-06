@@ -5,6 +5,8 @@ import { DayForecastWidget } from "../components/weather/DayForecastWidget";
 import { WeekWeatherWidget } from "../components/weather/WeekWeatherWidget";
 import { PlotGrid } from "../components/plot/PlotGrid";
 import dashboardIcon from "../../imports/DashboardHouseIcon.jpg";
+import { useAuth } from "../auth/AuthContext";
+
 
 const newsFeed = [
   { title: "Community Work Party — June 22", tag: "Event", tagColor: C.sage,
@@ -24,6 +26,8 @@ const topTask = {
 };
 
 export function DashboardScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+  const { isApproved } = useAuth();
+
   return (
     <div style={{ display: "flex", flex: 1, overflow: "hidden", background: C.cream, ...sans,
       justifyContent: "center" }}>
@@ -43,9 +47,12 @@ export function DashboardScreen({ setScreen }: { setScreen: (s: Screen) => void 
           </h1>
         </div>
 
-        {/* Interactive plot grid */}
+        {/* Interactive plot grid — pending users do not see owner names. */}
         <div style={{ marginBottom: "1.375rem" }}>
-          <PlotGrid onNavigate={() => setScreen("plot")} />
+          <PlotGrid
+            onNavigate={() => setScreen("plot")}
+            hideOwnerNames={!isApproved}
+          />
         </div>
 
         {/* Newsfeed + Noname board — equal-width pair */}

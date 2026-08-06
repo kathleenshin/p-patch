@@ -5,8 +5,10 @@ import { PlantIcon } from "../PlantIcon";
 import { plotColors, type PlotInfo } from "./types";
 import { PlotHoverCard } from "./PlotHoverCard";
 
-export function PlotCell({ plot, onClick, selected = false }: {
+export function PlotCell({ plot, onClick, selected = false, hideOwnerNames = false }: {
   plot: PlotInfo; onClick: () => void; selected?: boolean;
+  /** Pending viewers see status label instead of owner name. */
+  hideOwnerNames?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const [pos, setPos]         = useState({ x: 0, y: 0 });
@@ -57,12 +59,20 @@ export function PlotCell({ plot, onClick, selected = false }: {
         <div style={{ textAlign: "center", fontSize: "0.58rem", marginTop: "0.1875rem", fontWeight: 700,
           color: plot.state === "available" || plot.state === "pending" ? C.muted : `${col.text}CC`,
           whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {plot.owner && plot.state !== "available" && plot.state !== "pending"
+          {/* Hide personal names for pending (unapproved) users. */}
+          {!hideOwnerNames && plot.owner && plot.state !== "available" && plot.state !== "pending"
             ? plot.owner
             : col.label}
         </div>
       </div>
-      {hovered && <PlotHoverCard plot={plot} x={pos.x} y={pos.y} />}
+      {hovered && (
+        <PlotHoverCard
+          plot={plot}
+          x={pos.x}
+          y={pos.y}
+          hideOwnerNames={hideOwnerNames}
+        />
+      )}
     </>
   );
 }

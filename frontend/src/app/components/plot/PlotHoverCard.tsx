@@ -1,8 +1,21 @@
 import { C, mono, serif } from "../../theme";
 import { plotColors, type PlotInfo } from "./types";
 
-export function PlotHoverCard({ plot, x, y }: { plot: PlotInfo; x: number; y: number }) {
+export function PlotHoverCard({
+  plot,
+  x,
+  y,
+  hideOwnerNames = false,
+}: {
+  plot: PlotInfo;
+  x: number;
+  y: number;
+  hideOwnerNames?: boolean;
+}) {
   const col = plotColors[plot.state];
+  // Occupied plots: show owner only when allowed for this viewer.
+  const showOwner = !hideOwnerNames && Boolean(plot.owner);
+
   return (
     <div style={{ position: "fixed", left: x + 14, top: y - 10, zIndex: 100,
       background: C.white, border: `0.125rem solid ${col.border}`,
@@ -22,9 +35,14 @@ export function PlotHoverCard({ plot, x, y }: { plot: PlotInfo; x: number; y: nu
         <div style={{ color: C.lavender, fontSize: "0.78rem" }}>⏳ Awaiting admin approval</div>
       ) : (
         <>
-          <div style={{ fontWeight: 700, fontSize: "0.86rem", color: C.brown,
-            marginBottom: "0.1875rem", ...serif }}>{plot.owner}</div>
-          {plot.since && (
+          {showOwner ? (
+            <div style={{ fontWeight: 700, fontSize: "0.86rem", color: C.brown,
+              marginBottom: "0.1875rem", ...serif }}>{plot.owner}</div>
+          ) : (
+            <div style={{ fontWeight: 700, fontSize: "0.86rem", color: C.brown,
+              marginBottom: "0.1875rem", ...serif }}>{col.label}</div>
+          )}
+          {!hideOwnerNames && plot.since && (
             <div style={{ fontSize: "0.7rem", color: C.muted, marginBottom: "0.375rem" }}>
               Member since {plot.since} · {plot.section}
             </div>

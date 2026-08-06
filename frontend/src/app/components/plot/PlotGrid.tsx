@@ -5,7 +5,14 @@ import { plotColors, type FilterKey } from "./types";
 import { PlotCell } from "./PlotCell";
 import { PlotDetailPanel } from "./PlotDetailPanel";
 
-export function PlotGrid({ onNavigate }: { onNavigate: () => void }) {
+export function PlotGrid({
+  onNavigate,
+  hideOwnerNames = false,
+}: {
+  onNavigate: () => void;
+  /** When true (pending users), omit owner identity in cells/hover/detail. */
+  hideOwnerNames?: boolean;
+}) {
   const [filter,     setFilter]     = useState<FilterKey>("all");
   const [selectedId, setSelectedId] = useState<number | null>(null);
 
@@ -60,6 +67,7 @@ export function PlotGrid({ onNavigate }: { onNavigate: () => void }) {
             {visible.map(p => (
               <PlotCell key={p.id} plot={p}
                 selected={selectedId === p.id}
+                hideOwnerNames={hideOwnerNames}
                 onClick={() => handleClick(p.id)} />
             ))}
           </div>
@@ -70,8 +78,15 @@ export function PlotGrid({ onNavigate }: { onNavigate: () => void }) {
         </div>
 
         {/* Detail panel */}
-        {selected && <PlotDetailPanel plot={selected} colByState={colByState}
-          onClose={() => setSelectedId(null)} onNavigate={onNavigate} />}
+        {selected && (
+          <PlotDetailPanel
+            plot={selected}
+            colByState={colByState}
+            hideOwnerNames={hideOwnerNames}
+            onClose={() => setSelectedId(null)}
+            onNavigate={onNavigate}
+          />
+        )}
       </div>
     </div>
   );
