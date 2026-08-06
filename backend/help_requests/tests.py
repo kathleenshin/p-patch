@@ -16,13 +16,11 @@ class HelpRequestModelTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.creator = User.objects.create_user(
-            username="creator",
             email="creator@example.com",
             password="password",
         )
 
         cls.assignee = User.objects.create_user(
-            username="assignee",
             email="assignee@example.com",
             password="password",
         )

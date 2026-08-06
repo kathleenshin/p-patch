@@ -29,32 +29,27 @@ class BaseUserFixtures(TestCase):
         cls.d4 = datetime.date(2026, 4, 1)
 
         cls.admin_user = User.objects.create_user(
-            username="fixture_admin",
             email="fixture-admin@example.com",
             password="password",
             is_staff=True,
         )
 
         cls.user_one = User.objects.create_user(
-            username="testuser",
             email="testuser@example.com",
             password="password",
         )
 
         cls.user_two = User.objects.create_user(
-            username="coowner",
             email="coowner@example.com",
             password="password",
         )
 
         cls.user_three = User.objects.create_user(
-            username="thirduser",
             email="thirduser@example.com",
             password="password",
         )
 
         cls.outsider_user = User.objects.create_user(
-            username="outsider",
             email="outsider@example.com",
             password="password",
         )
@@ -234,7 +229,7 @@ class PlotOwnershipModelTests(BaseUserFixtures):
 
         self.assertEqual(
             str(ownership),
-            "testuser - Judkins Park P-Patch - Plot 1",
+            f"{self.user_one.email} - Judkins Park P-Patch - Plot 1",
         )
 
     def test_unique_active_ownership_blocks_duplicate_active_row(self):
@@ -570,5 +565,5 @@ class PlotNoteModelTests(BaseUserFixtures):
 
         self.assertEqual(
             str(note),
-            "Note by testuser on Plot 1",
+            f"Note by {self.user_one.email} on Plot 1",
         )
