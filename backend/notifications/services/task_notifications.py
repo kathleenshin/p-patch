@@ -1,3 +1,5 @@
+from django.template.loader import render_to_string
+
 from help_requests.models import HelpRequest
 
 from .email_provider import EmailDeliveryResult
@@ -22,11 +24,15 @@ def notify_new_help_request(
         subject = "New garden help request"
         location = help_request.garden.name
 
-    message = (
-        f"A new help request has been posted for {location}.\n\n"
-        f"Task: {help_request.title}\n"
-        f"Description: {help_request.description}"
-    )
+    # Uses .txt email template
+    # TODO: Create HTML email template for help request notifications
+    message = render_to_string(
+        "notifications/help_request.txt",
+        {
+            "help_request": help_request,
+            "location": location,
+        },
+    ).strip()
 
     return service.send_email(
         recipients=recipients,

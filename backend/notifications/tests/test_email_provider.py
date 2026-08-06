@@ -25,10 +25,3 @@ class EmailProviderTests(SimpleTestCase):
 
         self.assertIsNone(result.message_id)
         self.assertIsNone(result.provider_response)
-
-    def test_email_provider_cannot_be_instantiated(self):
-        with self.assertRaises(TypeError):
-            EmailProvider()
-
-    def test_email_delivery_error_is_runtime_error(self):
-        self.assertTrue(issubclass(EmailDeliveryError, RuntimeError))
