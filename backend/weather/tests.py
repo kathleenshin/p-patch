@@ -11,6 +11,12 @@ from plots.models import Garden
 from .services.open_meteo import OpenMeteoService, WeatherServiceError
 
 
+WEATHER_FORECAST_URL_NAME = "weather-forecast"
+AUTH_TEST_EMAIL = "weather-test@example.com"
+AUTH_TEST_PASSWORD = "password123"
+OPEN_METEO_UNAVAILABLE_DETAIL = "Unable to retrieve weather data from Open-Meteo."
+
+
 class WeatherTestFixtures(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -23,6 +29,28 @@ class WeatherTestFixtures(TestCase):
         cls.garden_without_coordinates = Garden.objects.create(
             name="No Coordinates Garden",
         )
+
+    @staticmethod
+    def weather_url():
+        return reverse(WEATHER_FORECAST_URL_NAME)
+
+    @staticmethod
+    def auth_headers_for_user(user):
+        token = str(AccessToken.for_user(user))
+        return {"HTTP_AUTHORIZATION": f"Bearer {token}"}
+
+    @staticmethod
+    def create_auth_user():
+        return get_user_model().objects.create_user(
+            email=AUTH_TEST_EMAIL,
+            password=AUTH_TEST_PASSWORD,
+        )
+
+    def weather_get(self, client, garden_id=None):
+        params = {}
+        if garden_id is not None:
+            params["garden_id"] = garden_id
+        return client.get(self.weather_url(), params)
 
     @staticmethod
     def sample_raw_payload():
@@ -80,23 +108,19 @@ class WeatherTestFixtures(TestCase):
 
 class WeatherViewTests(WeatherTestFixtures):
     def setUp(self):
-        user = get_user_model().objects.create_user(
-            email="weather-test@example.com",
-            password="password123",
-        )
-        token = str(AccessToken.for_user(user))
-        self.client.defaults["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+        user = self.create_auth_user()
+        self.client.defaults.update(self.auth_headers_for_user(user))
 
     def test_requires_authentication(self):
-        response = self.client_class().get(
-            reverse("weather-forecast"),
-            {"garden_id": self.garden_with_coordinates.id},
+        response = self.weather_get(
+            client=self.client_class(),
+            garden_id=self.garden_with_coordinates.id,
         )
 
         self.assertEqual(response.status_code, 401)
 
     def test_requires_garden_id(self):
-        response = self.client.get(reverse("weather-forecast"))
+        response = self.weather_get(client=self.client)
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(
@@ -105,17 +129,14 @@ class WeatherViewTests(WeatherTestFixtures):
         )
 
     def test_returns_404_for_unknown_garden(self):
-        response = self.client.get(
-            reverse("weather-forecast"),
-            {"garden_id": 999999},
-        )
+        response = self.weather_get(client=self.client, garden_id=999999)
 
         self.assertEqual(response.status_code, 404)
 
     def test_requires_garden_coordinates(self):
-        response = self.client.get(
-            reverse("weather-forecast"),
-            {"garden_id": self.garden_without_coordinates.id},
+        response = self.weather_get(
+            client=self.client,
+            garden_id=self.garden_without_coordinates.id,
         )
 
         self.assertEqual(response.status_code, 400)
@@ -128,9 +149,9 @@ class WeatherViewTests(WeatherTestFixtures):
     def test_uses_garden_coordinates(self, mock_get_forecast):
         mock_get_forecast.return_value = self.sample_normalized_payload()
 
-        response = self.client.get(
-            reverse("weather-forecast"),
-            {"garden_id": self.garden_with_coordinates.id},
+        response = self.weather_get(
+            client=self.client,
+            garden_id=self.garden_with_coordinates.id,
         )
 
         self.assertEqual(response.status_code, 200)
@@ -147,25 +168,22 @@ class WeatherViewTests(WeatherTestFixtures):
     @patch("weather.views.OpenMeteoService.get_forecast")
     def test_returns_502_when_service_fails(self, mock_get_forecast):
         mock_get_forecast.side_effect = WeatherServiceError(
-            "Unable to retrieve weather data from Open-Meteo."
+            OPEN_METEO_UNAVAILABLE_DETAIL
         )
 
-        response = self.client.get(
-            reverse("weather-forecast"),
-            {"garden_id": self.garden_with_coordinates.id},
+        response = self.weather_get(
+            client=self.client,
+            garden_id=self.garden_with_coordinates.id,
         )
 
         self.assertEqual(response.status_code, 502)
         self.assertEqual(
             response.json()["detail"],
-            "Unable to retrieve weather data from Open-Meteo.",
+            OPEN_METEO_UNAVAILABLE_DETAIL,
         )
 
     def test_requires_integer_garden_id(self):
-        response = self.client.get(
-            reverse("weather-forecast"),
-            {"garden_id": "abc"},
-        )
+        response = self.weather_get(client=self.client, garden_id="abc")
 
         self.assertEqual(response.status_code, 400)
         self.assertEqual(
@@ -243,7 +261,7 @@ class OpenMeteoServiceTests(WeatherTestFixtures):
 
         with self.assertRaisesRegex(
             WeatherServiceError,
-            "Unable to retrieve weather data from Open-Meteo.",
+            OPEN_METEO_UNAVAILABLE_DETAIL,
         ):
             OpenMeteoService.get_forecast(
                 latitude=47.6062,
@@ -263,7 +281,7 @@ class OpenMeteoServiceTests(WeatherTestFixtures):
 
         with self.assertRaisesRegex(
             WeatherServiceError,
-            "Unable to retrieve weather data from Open-Meteo.",
+            OPEN_METEO_UNAVAILABLE_DETAIL,
         ):
             OpenMeteoService.get_forecast(
                 latitude=47.6062,
