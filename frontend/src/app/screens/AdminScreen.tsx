@@ -14,8 +14,14 @@ import {
 } from "@/lib/adminApi";
 import type { AuthUser } from "@/lib/authApi";
 import { ApiError } from "@/lib/api";
+// Live Admin unclaimed-tasks panel + resend-claim action.
+import {
+  fetchHelpRequests,
+  resendHelpRequestClaim,
+  type HelpRequest,
+} from "@/lib/helpRequestsApi";
 
-type AdminListModal = "pending" | "plots" | "tasks" | "inventory" | null;
+type AdminListModal = "pending" | "plots" | "tasks" | "inventory" | null; // which View-all modal is open
 
 const AVATAR_COLORS = [C.terra, C.sage, C.amber, C.lavender, C.sky];
 
@@ -44,12 +50,34 @@ function formatJoined(dateJoined?: string): string {
   });
 }
 
+/** Format help-request due_date for Admin rows (YYYY-MM-DD → locale date). */
+function formatDueDate(dueDate: string | null): string {
+  if (!dueDate) return "No due date";
+  const date = new Date(dueDate);
+  if (Number.isNaN(date.getTime())) return dueDate;
+  return date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+/** Unclaimed = no assignee and not completed. */
+function isUnclaimedHelpRequest(request: HelpRequest): boolean {
+  return request.assigned_to == null && request.status !== "done";
+}
+
 export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { accessToken } = useAuth();
   const { plots, plotsLoading, plotsError } = usePlots();
 
+  const unassignedPlots = plots.filter(
+    (plot) => plot.is_active && plot.owners.length === 0
+  );
+
   const [showAnnForm, setShowAnnForm] = useState(false);
   const [annText, setAnnText] = useState("");
+  // Controls the full-list popup (pending today; other keys reserved for later panels).
   const [listModal, setListModal] = useState<AdminListModal>(null);
 
   // Live pending registrations (other Admin panels stay mock for now).
@@ -58,9 +86,12 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [pendingError, setPendingError] = useState<string | null>(null);
   const [actionUserId, setActionUserId] = useState<number | null>(null);
 
-    const unassignedPlots = plots.filter(
-        (plot) => plot.is_active && plot.owners.length === 0
-    );
+  // Live unclaimed help requests (no assignee, not done).
+  const [unclaimedTasks, setUnclaimedTasks] = useState<HelpRequest[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+  const [resendingTaskId, setResendingTaskId] = useState<number | null>(null); // disables Resend while in flight
+  const [resendMessage, setResendMessage] = useState<string | null>(null); // success toast line above the list
 
   const loadPending = useCallback(async () => {
     if (!accessToken) {
@@ -87,9 +118,40 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     }
   }, [accessToken]);
 
+  // Load help requests and keep only unclaimed ones for the Admin panel.
+  const loadUnclaimedTasks = useCallback(async () => {
+    if (!accessToken) {
+      setUnclaimedTasks([]);
+      setTasksLoading(false);
+      return;
+    }
+    setTasksLoading(true);
+    setTasksError(null);
+    try {
+      const requests = await fetchHelpRequests(accessToken);
+      setUnclaimedTasks(requests.filter(isUnclaimedHelpRequest));
+    } catch (err) {
+      setUnclaimedTasks([]);
+      setTasksError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Could not load unclaimed tasks.",
+      );
+    } finally {
+      setTasksLoading(false);
+    }
+  }, [accessToken]);
+
   useEffect(() => {
     void loadPending();
   }, [loadPending]);
+
+  // Fetch unclaimed tasks whenever the auth token is available.
+  useEffect(() => {
+    void loadUnclaimedTasks();
+  }, [loadUnclaimedTasks]);
 
   /** Approve then refresh the pending list. */
   async function handleApprove(userId: number) {
@@ -133,18 +195,40 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     }
   }
 
+  /** Resend claim-notification email to all active garden members (admin only; no assign). */
+  async function handleResendClaim(taskId: number) {
+    if (!accessToken) return;
+    setResendingTaskId(taskId);
+    setTasksError(null);
+    setResendMessage(null);
+    try {
+      const result = await resendHelpRequestClaim(accessToken, taskId);
+      setResendMessage(
+        result.recipients > 0
+          ? `Claim email resent (${result.recipients} recipients).`
+          : result.detail,
+      );
+    } catch (err) {
+      setTasksError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Resend claim email failed.",
+      );
+    } finally {
+      setResendingTaskId(null);
+    }
+  }
+
   const statCards = [
-    // First card reflects the live pending queue length.
+    // Pending opens the full-list modal; other cards still navigate to member screens.
     { label: "Pending Registrations", value: pendingUsers.length, color: C.terra,    Icon: Users,         action: () => setListModal("pending") },
-    { label: "Unassigned Plots",       value: 3, color: C.amber,   Icon: LayoutGrid,    action: () => setScreen("plot") },
-    { label: "Unclaimed Tasks",        value: 2, color: C.lavender, Icon: ClipboardList, action: () => setScreen("tasks") },
+    { label: "Unassigned Plots",      value: unassignedPlots.length, color: C.amber, Icon: LayoutGrid,   action: () => setScreen("plot") },
+    // Live unclaimed count; opens the tasks View-all modal.
+    { label: "Unclaimed Tasks",        value: unclaimedTasks.length, color: C.lavender, Icon: ClipboardList, action: () => setListModal("tasks") },
     { label: "Inventory Alerts",       value: 1, color: C.sky,     Icon: Archive,       action: () => setScreen("inventory") },
     { label: "Flagged Content",        value: 0, color: C.sage,    Icon: AlertTriangle, action: () => {} },
-  ];
-
-  const helpRequests = [
-    { title: "Repair the north fence",  date: "September 15, 2025", urgent: true  },
-    { title: "Water shared flower bed", date: "October 2, 2025",    urgent: false },
   ];
 
   const inventoryAlerts = [
@@ -190,6 +274,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     </button>
   );
 
+  // Shared pending rows for the dashboard panel and the View-all modal.
   function renderPendingList() {
     if (pendingLoading) {
       return (
@@ -216,13 +301,122 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       const color = AVATAR_COLORS[user.id % AVATAR_COLORS.length];
       const busy = actionUserId === user.id;
       return (
-          <div key={user.id} style={{ display: "flex", alignItems: "center",
-            gap: "0.625rem", padding: "0.6875rem 1rem",
-            borderBottom: i < pendingUsers.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-            {/* same avatar / name / Approve / Reject markup you already have */}
+        <div key={user.id} style={{ display: "flex", alignItems: "center",
+          gap: "0.625rem", padding: "0.6875rem 1rem",
+          borderBottom: i < pendingUsers.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
+          <div style={{ width: "2rem", height: "2rem", borderRadius: "50%",
+            background: color, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: C.white, fontWeight: 800, fontSize: "0.64rem" }}>
+            {initialsFor(user)}
           </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
+              {displayName(user)}
+            </div>
+            <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>
+              {user.email}
+              {user.date_joined ? ` · ${formatJoined(user.date_joined)}` : ""}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: "0.375rem" }}>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleApprove(user.id)}
+              style={{ background: C.sageLight, color: C.sageDark, border: "none",
+                borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
+                cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1,
+                fontFamily: "'Nunito', sans-serif" }}>
+              Approve
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void handleReject(user.id)}
+              style={{ background: C.terraLight, color: C.terra, border: "none",
+                borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
+                cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1,
+                fontFamily: "'Nunito', sans-serif" }}>
+              Reject
+            </button>
+          </div>
+        </div>
       );
     });
+  }
+
+  // Shared unclaimed-task rows for the dashboard panel and the View-all modal.
+  function renderUnclaimedList() {
+    if (tasksLoading) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+          Loading unclaimed tasks…
+        </div>
+      );
+    }
+    if (tasksError) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.terra, fontWeight: 600 }}>
+          {tasksError}
+        </div>
+      );
+    }
+    if (unclaimedTasks.length === 0) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+          No unclaimed help requests.
+        </div>
+      );
+    }
+    return (
+      <>
+        {/* Shown after a successful resend-claim call */}
+        {resendMessage && (
+          <div style={{ padding: "0.75rem 1rem 0", fontSize: "0.72rem", color: C.sage, fontWeight: 700 }}>
+            {resendMessage}
+          </div>
+        )}
+        {unclaimedTasks.map((task, i) => {
+          const highPriority = task.priority === "high";
+          const busy = resendingTaskId === task.id;
+          return (
+            <div key={task.id} style={{ display: "flex", alignItems: "center",
+              gap: "0.625rem", padding: "0.6875rem 1rem",
+              borderBottom: i < unclaimedTasks.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown, marginBottom: "0.125rem" }}>
+                  {task.title}
+                </div>
+                <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>
+                  {formatDueDate(task.due_date)}
+                </div>
+              </div>
+              {/* Priority badge — high uses terra, otherwise amber */}
+              <span style={{
+                background: highPriority ? C.terraLight : C.amberLight,
+                color: highPriority ? C.terra : C.amber,
+                fontSize: "0.64rem", fontWeight: 800, padding: "0.125rem 0.5rem", borderRadius: "1.25rem",
+                textTransform: "capitalize",
+              }}>
+                {task.priority}
+              </span>
+              {/* Admin can only resend claim email — no assignee picker */}
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleResendClaim(task.id)}
+                style={{ background: C.sageLight, color: C.lavender, border: "none",
+                  borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
+                  cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1,
+                  fontFamily: "'Nunito', sans-serif", whiteSpace: "nowrap" }}>
+                {busy ? "Sending…" : "Resend claim email"}
+              </button>
+            </div>
+          );
+        })}
+      </>
+    );
   }
 
   return (
@@ -282,7 +476,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         {/* 2x2 panel grid */}
         <div className="admin-panel-grid" style={{ marginBottom: "0.875rem" }}>
 
-        {/* Live pending queue from GET /api/auth/pending/ */}
+          {/* View all opens the full pending list in a modal */}
           {panel("Pending Registrations", <Users size={13} color={C.sage} />, viewAll(() => setListModal("pending")), (
             <div>
               {renderPendingList()}
@@ -291,47 +485,81 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
           {panel("Unassigned Plots", <LayoutGrid size={13} color={C.sage} />, viewAll(() => setScreen("plot")), (
             <div>
-              {unassignedPlots.map((p, i) => (
-                <div key={p.id} style={{ display: "flex", alignItems: "center",
-                  gap: "0.625rem", padding: "0.6875rem 1rem",
-                  borderBottom: i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-                  <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5625rem", background: C.sageLight,
-                    flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <LayoutGrid size={14} color={C.sage} />
-                  </div>
-                    <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
-                            Plot {p.plot_number}
-                        </div>
-                        <div style={{ fontSize: "0.66rem", color: C.muted }}>
-                            {p.garden_name}
-                        </div>
-                    </div>
-                  <button style={{ background: C.amberLight, color: C.amber, border: "none",
-                    borderRadius: "0.4375rem", padding: "0.25rem 0.75rem", fontSize: "0.68rem", fontWeight: 800,
-                    cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>Assign</button>
+              {plotsLoading ? (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+                  Loading plots…
                 </div>
-              ))}
+              ) : plotsError ? (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.terra, fontWeight: 600 }}>
+                  {plotsError}
+                </div>
+              ) : unassignedPlots.length === 0 ? (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+                  No unassigned plots.
+                </div>
+              ) : (
+                unassignedPlots.map((p, i) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.625rem",
+                      padding: "0.6875rem 1rem",
+                      borderBottom:
+                        i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "2rem",
+                        height: "2rem",
+                        borderRadius: "0.5625rem",
+                        background: C.sageLight,
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <LayoutGrid size={14} color={C.sage} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
+                        Plot {p.plot_number}
+                      </div>
+                      <div style={{ fontSize: "0.66rem", color: C.muted }}>
+                        {p.garden_name}
+                      </div>
+                    </div>
+                    <button
+                      disabled
+                      title="Plot assignment is not implemented yet"
+                      style={{
+                        background: C.amberLight,
+                        color: C.amber,
+                        border: "none",
+                        borderRadius: "0.4375rem",
+                        padding: "0.25rem 0.75rem",
+                        fontSize: "0.68rem",
+                        fontWeight: 800,
+                        cursor: "not-allowed",
+                        opacity: 0.6,
+                        fontFamily: "'Nunito', sans-serif",
+                      }}
+                    >
+                      Assign
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           ))}
 
-          {panel("Unclaimed Help Requests", <AlertTriangle size={13} color={C.sage} />, viewAll(() => setScreen("tasks")), (
+          {/* Live unclaimed help requests — Resend claim email only (no assign) */}
+          {panel("Unclaimed Help Requests", <AlertTriangle size={13} color={C.sage} />, viewAll(() => setListModal("tasks")), (
             <div>
-              {helpRequests.map((h, i) => (
-                <div key={h.title} style={{ display: "flex", alignItems: "center",
-                  gap: "0.625rem", padding: "0.6875rem 1rem",
-                  borderBottom: i < helpRequests.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown, marginBottom: "0.125rem" }}>{h.title}</div>
-                    <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>{h.date}</div>
-                  </div>
-                  <span style={{ background: h.urgent ? C.terraLight : C.amberLight,
-                    color: h.urgent ? C.terra : C.amber,
-                    fontSize: "0.64rem", fontWeight: 800, padding: "0.125rem 0.5rem", borderRadius: "1.25rem" }}>
-                    {h.urgent ? "Urgent" : "Pending"}
-                  </span>
-                </div>
-              ))}
+              {renderUnclaimedList()}
             </div>
           ))}
 
@@ -436,6 +664,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
       </div>
 
+      {/* Full pending list modal (stat card / View all). Backdrop click closes. */}
       {listModal === "pending" && (
         <div
           role="dialog"
@@ -453,6 +682,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             padding: "1rem",
           }}
         >
+          {/* stopPropagation so clicks inside the card do not close the modal */}
           <div
             onClick={(e) => e.stopPropagation()}
             style={{
@@ -485,8 +715,68 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                 <X size={17} />
               </button>
             </div>
+            {/* Scrollable body reuses the same pending rows as the panel */}
             <div style={{ overflow: "auto", flex: 1 }}>
               {renderPendingList()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full unclaimed-tasks modal (stat card / View all). Backdrop click closes. */}
+      {listModal === "tasks" && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Unclaimed help requests"
+          onClick={() => setListModal(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(44,31,20,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 40,
+            padding: "1rem",
+          }}
+        >
+          {/* stopPropagation so clicks inside the card do not close the modal */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: C.card,
+              borderRadius: "1.375rem",
+              width: "min(92%, 36rem)",
+              maxHeight: "min(80vh, 40rem)",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 1rem 3rem rgba(44,31,20,0.25)",
+              border: `0.125rem solid ${C.border}`,
+              overflow: "hidden",
+            }}
+          >
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "1rem 1.25rem",
+              borderBottom: `0.0625rem solid ${C.border}`,
+            }}>
+              <h3 style={{ ...serif, fontSize: "1.05rem", fontWeight: 700, color: C.brown, margin: 0 }}>
+                Unclaimed Help Requests
+              </h3>
+              <button
+                type="button"
+                onClick={() => setListModal(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.muted }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+            {/* Scrollable body reuses the same unclaimed rows as the panel */}
+            <div style={{ overflow: "auto", flex: 1 }}>
+              {renderUnclaimedList()}
             </div>
           </div>
         </div>
