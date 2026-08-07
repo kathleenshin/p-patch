@@ -172,6 +172,12 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # Auth email endpoints set throttle_classes explicitly; rates live here.
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_register": "10/hour",
+        "auth_resend_ip": "10/hour",
+        "auth_resend_email": "3/hour",
+    },
 }
 
 from datetime import timedelta
@@ -181,3 +187,24 @@ SIMPLE_JWT = {
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+# --- Email (console locally; AWS SES SMTP in production) ---
+# Dev default prints messages to the runserver console.
+# For SES: set EMAIL_BACKEND to django.core.mail.backends.smtp.EmailBackend
+# and EMAIL_HOST to email-smtp.<region>.amazonaws.com with SES SMTP credentials.
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    "Judkins Park P-Patch <noreply@example.com>",
+)
+# Used in confirmation links emailed to new registrants.
+# Prefer "localhost" over 127.0.0.1 — Vite often binds IPv6 localhost only.
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").strip().rstrip("/")
