@@ -5,6 +5,23 @@ from .test_fixtures import BasePlotAPITestCase
 
 class PlotNoteAPITests(BasePlotAPITestCase):
 
+    def test_plot_query_parameter_filters_notes_by_plot(self):
+        response = self.client.get(
+            self.plot_note_list_create_url,
+            {"plot": self.plot.id},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 1)
+        self.assertEqual(
+            response.json()[0]["id"],
+            self.note.id,
+        )
+        self.assertEqual(
+            response.json()[0]["plot"],
+            self.plot.id,
+        )
+
     def test_unauthenticated_user_cannot_list_notes(self):
         self.client.force_authenticate(user=None)
 

@@ -56,6 +56,11 @@ class BasePlotTestCase(TestCase):
             plot_number="1",
         )
 
+        cls.other_plot = Plot.objects.create(
+            garden=cls.garden,
+            plot_number="2",
+        )
+
 
 class BasePlotAPITestCase(BasePlotTestCase):
     @classmethod
@@ -64,10 +69,12 @@ class BasePlotAPITestCase(BasePlotTestCase):
 
         # Plot API fixtures
         cls.plot_list_create_url = reverse("plot-list-create")
+
         cls.plot_detail_url = reverse(
             "plot-detail",
             kwargs={"pk": cls.plot.pk},
         )
+
         cls.unknown_plot_detail_url = reverse(
             "plot-detail",
             kwargs={"pk": 999999},
@@ -79,6 +86,13 @@ class BasePlotAPITestCase(BasePlotTestCase):
             author=cls.user_one,
             content="Tomatoes were watered.",
             visibility="this_plot",
+        )
+
+        cls.other_note = PlotNote.objects.create(
+            plot=cls.other_plot,
+            author=cls.user_two,
+            content="Beans were watered.",
+            visibility="garden_members",
         )
 
         cls.plot_note_list_create_url = reverse(
@@ -102,7 +116,7 @@ class BasePlotAPITestCase(BasePlotTestCase):
         # Plot API payloads
         self.create_plot_payload = {
             "garden": self.garden.id,
-            "plot_number": "2",
+            "plot_number": "3",
             "is_active": True,
         }
 
