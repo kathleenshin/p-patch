@@ -30,10 +30,6 @@ export function DashboardScreen({ setScreen }: { setScreen: (s: Screen) => void 
   const { isApproved } = useAuth();
   const { plots, plotsLoading, plotsError } = usePlots();
 
-  console.log("plots:", plots);
-  console.log("plotsLoading:", plotsLoading);
-  console.log("plotsError:", plotsError);
-
   return (
     <div style={{ display: "flex", flex: 1, overflow: "hidden", background: C.cream, ...sans,
       justifyContent: "center" }}>
