@@ -23,7 +23,7 @@ This repo is set up for Netlify to host the Vite frontend only. The Django backe
 
 Set these in Netlify for the site:
 
-- `VITE_API_URL=https://your-render-backend.onrender.com`
+- `VITE_API_URL=https://p-patch.onrender.com`
 - `VITE_DEFAULT_GARDEN_ID=1` if you want to override the default garden used by inventory writes
 
 The repository root includes `netlify.toml` with:
@@ -34,7 +34,7 @@ The repository root includes `netlify.toml` with:
 
 After deploy, add your Netlify origin to the Django backend environment:
 
-- `ALLOWED_HOSTS=your-render-backend.onrender.com`
-- `CORS_ALLOWED_ORIGINS=https://your-netlify-site.netlify.app`
+- `ALLOWED_HOSTS=https://p-patch.onrender.com`
+- `CORS_ALLOWED_ORIGINS=https://p-patch.netlify.app`
 
 If you use a custom frontend domain, include that in `CORS_ALLOWED_ORIGINS` too.
