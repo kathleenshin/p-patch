@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
 from pathlib import Path
 
 import dj_database_url
@@ -37,6 +38,16 @@ ALLOWED_HOSTS = [
     for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
     if h.strip()
 ]
+
+
+def _csv_env(name: str, default: str = "") -> list[str]:
+    """Parse comma-separated env values into a clean list."""
+    return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
+
+
+def _normalize_origin(origin: str) -> str:
+    """CORS/CSRF origins must not include a trailing slash."""
+    return origin.strip().rstrip("/")
 
 # Application definition
 
@@ -173,13 +184,25 @@ STORAGES = {
     },
 }
 
+# Local Vite dev servers (5173, 5174, 5175, etc.)
+CORS_ALLOWED_ORIGIN_REGEXES = _csv_env(
+    "CORS_ALLOWED_ORIGIN_REGEXES",
+    r"^http://localhost:517\d$,^http://127\.0\.0\.1:517\d$",
+)
+
+# Explicit origins (production, staging, etc.)
 CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173",
-    ).split(",")
-    if origin.strip()
+    _normalize_origin(origin)
+    for origin in _csv_env("CORS_ALLOWED_ORIGINS")
+]
+
+# Keep CSRF trusted origins aligned with explicit CORS origins unless overridden.
+CSRF_TRUSTED_ORIGINS = [
+    _normalize_origin(origin)
+    for origin in _csv_env(
+        "CSRF_TRUSTED_ORIGINS",
+        ",".join(CORS_ALLOWED_ORIGINS),
+    )
 ]
 
 REST_FRAMEWORK = {

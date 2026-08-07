@@ -7,12 +7,26 @@ from .serializers import PlotNoteSerializer, PlotSerializer
 # implementation is finalized. For now, these endpoints rely on the
 # project's global authentication settings.
 class PlotListCreateView(generics.ListCreateAPIView):
-    queryset = Plot.objects.select_related("garden").all()
+    queryset = (
+        Plot.objects.select_related("garden")
+        .prefetch_related(
+            "ownerships__user",
+            "help_requests",
+        )
+        .all()
+    )
     serializer_class = PlotSerializer
 
 # Does not support Delete for MVP
 class PlotDetailView(generics.RetrieveUpdateAPIView):
-    queryset = Plot.objects.select_related("garden").all()
+    queryset = (
+        Plot.objects.select_related("garden")
+        .prefetch_related(
+            "ownerships__user",
+            "help_requests",
+        )
+        .all()
+    )
     serializer_class = PlotSerializer
 
 
