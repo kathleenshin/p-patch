@@ -19,8 +19,9 @@ export interface UserOption {
   last_name?: string;
 }
 
-export async function fetchHelpRequests(): Promise<HelpRequest[]> {
-  return apiFetch<HelpRequest[]>('/api/help-requests/');
+/** List help requests (pass JWT; required once authz is IsApproved). */
+export async function fetchHelpRequests(accessToken: string): Promise<HelpRequest[]> {
+  return apiFetch<HelpRequest[]>("/api/help-requests/", { token: accessToken });
 }
 
 export async function createHelpRequest(payload: {
@@ -57,4 +58,15 @@ export async function fetchUsers(accessToken: string): Promise<UserOption[]> {
     token: accessToken,
   });
   return Array.isArray(data) ? (data as UserOption[]) : [];
+}
+
+/** Garden-admin only: re-broadcast claim email for an unclaimed help request. */
+export async function resendHelpRequestClaim(
+  accessToken: string,
+  id: number,
+): Promise<{ detail: string; recipients: number }> {
+  return apiFetch(`/api/help-requests/${id}/resend-claim/`, {
+    method: "POST",
+    token: accessToken,
+  });
 }
