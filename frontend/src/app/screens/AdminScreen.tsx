@@ -6,6 +6,7 @@ import {
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import type { Screen } from "../types";
 import { useAuth } from "../auth/AuthContext";
+import { usePlots } from "../hooks/usePlots";
 import {
   approveUser,
   fetchPendingUsers,
@@ -43,6 +44,12 @@ function formatJoined(dateJoined?: string): string {
 
 export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { accessToken } = useAuth();
+  const { plots, plotsLoading, plotsError } = usePlots();
+
+  const unassignedPlots = plots.filter(
+    (plot) => plot.is_active && plot.owners.length === 0
+  );
+
   const [showAnnForm, setShowAnnForm] = useState(false);
   const [annText, setAnnText] = useState("");
 
@@ -126,16 +133,10 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const statCards = [
     // First card reflects the live pending queue length.
     { label: "Pending Registrations", value: pendingUsers.length, color: C.terra,    Icon: Users,         action: () => {} },
-    { label: "Unassigned Plots",       value: 3, color: C.amber,   Icon: LayoutGrid,    action: () => setScreen("plot") },
+    { label: "Unassigned Plots",      value: unassignedPlots.length, color: C.amber, Icon: LayoutGrid,   action: () => {} },
     { label: "Unclaimed Tasks",        value: 2, color: C.lavender, Icon: ClipboardList, action: () => setScreen("tasks") },
     { label: "Inventory Alerts",       value: 1, color: C.sky,     Icon: Archive,       action: () => setScreen("inventory") },
     { label: "Flagged Content",        value: 0, color: C.sage,    Icon: AlertTriangle, action: () => {} },
-  ];
-
-  const unassignedPlots = [
-    { id: 5,  zone: "North" },
-    { id: 12, zone: "South" },
-    { id: 21, zone: "East"  },
   ];
 
   const helpRequests = [
@@ -242,8 +243,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
         {/* 2x2 panel grid */}
         <div className="admin-panel-grid" style={{ marginBottom: "0.875rem" }}>
-
-        {/* Live pending queue from GET /api/auth/pending/ */}
+          {/* Live pending queue from GET /api/auth/pending/ */}
           {panel("Pending Registrations", <Users size={13} color={C.sage} />, viewAll(), (
             <div>
               {pendingLoading && (
@@ -261,91 +261,199 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                   No pending registrations.
                 </div>
               )}
-              {!pendingLoading && pendingUsers.map((user, i) => {
-                const color = AVATAR_COLORS[user.id % AVATAR_COLORS.length];
-                const busy = actionUserId === user.id;
-                return (
-                  <div key={user.id} style={{ display: "flex", alignItems: "center",
-                    gap: "0.625rem", padding: "0.6875rem 1rem",
-                    borderBottom: i < pendingUsers.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-                    <div style={{ width: "2rem", height: "2rem", borderRadius: "50%",
-                      background: color, flexShrink: 0,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: C.white, fontWeight: 800, fontSize: "0.64rem" }}>
-                      {initialsFor(user)}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
-                        {displayName(user)}
+              {!pendingLoading &&
+                pendingUsers.map((user, i) => {
+                  const color = AVATAR_COLORS[user.id % AVATAR_COLORS.length];
+                  const busy = actionUserId === user.id;
+                  return (
+                    <div
+                      key={user.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.625rem",
+                        padding: "0.6875rem 1rem",
+                        borderBottom:
+                          i < pendingUsers.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: "2rem",
+                          height: "2rem",
+                          borderRadius: "50%",
+                          background: color,
+                          flexShrink: 0,
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          color: C.white,
+                          fontWeight: 800,
+                          fontSize: "0.64rem",
+                        }}
+                      >
+                        {initialsFor(user)}
                       </div>
-                      <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>
-                        {user.email}
-                        {user.date_joined ? ` · ${formatJoined(user.date_joined)}` : ""}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
+                          {displayName(user)}
+                        </div>
+                        <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>
+                          {user.email}
+                          {user.date_joined ? ` · ${formatJoined(user.date_joined)}` : ""}
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", gap: "0.375rem" }}>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void handleApprove(user.id)}
+                          style={{
+                            background: C.sageLight,
+                            color: C.sageDark,
+                            border: "none",
+                            borderRadius: "0.4375rem",
+                            padding: "0.25rem 0.625rem",
+                            fontSize: "0.68rem",
+                            fontWeight: 800,
+                            cursor: busy ? "wait" : "pointer",
+                            opacity: busy ? 0.7 : 1,
+                            fontFamily: "'Nunito', sans-serif",
+                          }}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => void handleReject(user.id)}
+                          style={{
+                            background: C.terraLight,
+                            color: C.terra,
+                            border: "none",
+                            borderRadius: "0.4375rem",
+                            padding: "0.25rem 0.625rem",
+                            fontSize: "0.68rem",
+                            fontWeight: 800,
+                            cursor: busy ? "wait" : "pointer",
+                            opacity: busy ? 0.7 : 1,
+                            fontFamily: "'Nunito', sans-serif",
+                          }}
+                        >
+                          Reject
+                        </button>
                       </div>
                     </div>
-                    <div style={{ display: "flex", gap: "0.375rem" }}>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void handleApprove(user.id)}
-                        style={{ background: C.sageLight, color: C.sageDark, border: "none",
-                          borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
-                          cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1,
-                          fontFamily: "'Nunito', sans-serif" }}>
-                        Approve
-                      </button>
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void handleReject(user.id)}
-                        style={{ background: C.terraLight, color: C.terra, border: "none",
-                          borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
-                          cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1,
-                          fontFamily: "'Nunito', sans-serif" }}>
-                        Reject
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
             </div>
           ))}
 
-          {panel("Unassigned Plots", <LayoutGrid size={13} color={C.sage} />, viewAll(() => setScreen("plot")), (
+          {panel("Unassigned Plots", <LayoutGrid size={13} color={C.sage} />, viewAll(), (
             <div>
-              {unassignedPlots.map((p, i) => (
-                <div key={p.id} style={{ display: "flex", alignItems: "center",
-                  gap: "0.625rem", padding: "0.6875rem 1rem",
-                  borderBottom: i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-                  <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5625rem", background: C.sageLight,
-                    flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <LayoutGrid size={14} color={C.sage} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>Plot {p.id}</div>
-                    <div style={{ fontSize: "0.66rem", color: C.muted }}>{p.zone} Zone</div>
-                  </div>
-                  <button style={{ background: C.amberLight, color: C.amber, border: "none",
-                    borderRadius: "0.4375rem", padding: "0.25rem 0.75rem", fontSize: "0.68rem", fontWeight: 800,
-                    cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>Assign</button>
+              {plotsLoading ? (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+                  Loading plots…
                 </div>
-              ))}
+              ) : plotsError ? (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.terra, fontWeight: 600 }}>
+                  {plotsError}
+                </div>
+              ) : unassignedPlots.length === 0 ? (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+                  No unassigned plots.
+                </div>
+              ) : (
+                unassignedPlots.map((p, i) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.625rem",
+                      padding: "0.6875rem 1rem",
+                      borderBottom:
+                        i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "2rem",
+                        height: "2rem",
+                        borderRadius: "0.5625rem",
+                        background: C.sageLight,
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <LayoutGrid size={14} color={C.sage} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
+                        Plot {p.plot_number}
+                      </div>
+                      <div style={{ fontSize: "0.66rem", color: C.muted }}>
+                        {p.garden_name}
+                      </div>
+                    </div>
+                    <button
+                      disabled
+                      title="Plot assignment is not implemented yet"
+                      style={{
+                        background: C.amberLight,
+                        color: C.amber,
+                        border: "none",
+                        borderRadius: "0.4375rem",
+                        padding: "0.25rem 0.75rem",
+                        fontSize: "0.68rem",
+                        fontWeight: 800,
+                        cursor: "not-allowed",
+                        opacity: 0.6,
+                        fontFamily: "'Nunito', sans-serif",
+                      }}
+                    >
+                      Assign
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           ))}
 
           {panel("Unclaimed Help Requests", <AlertTriangle size={13} color={C.sage} />, viewAll(() => setScreen("tasks")), (
             <div>
               {helpRequests.map((h, i) => (
-                <div key={h.title} style={{ display: "flex", alignItems: "center",
-                  gap: "0.625rem", padding: "0.6875rem 1rem",
-                  borderBottom: i < helpRequests.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
+                <div
+                  key={h.title}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.625rem",
+                    padding: "0.6875rem 1rem",
+                    borderBottom:
+                      i < helpRequests.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+                  }}
+                >
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown, marginBottom: "0.125rem" }}>{h.title}</div>
-                    <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>{h.date}</div>
+                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown, marginBottom: "0.125rem" }}>
+                      {h.title}
+                    </div>
+                    <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>
+                      {h.date}
+                    </div>
                   </div>
-                  <span style={{ background: h.urgent ? C.terraLight : C.amberLight,
-                    color: h.urgent ? C.terra : C.amber,
-                    fontSize: "0.64rem", fontWeight: 800, padding: "0.125rem 0.5rem", borderRadius: "1.25rem" }}>
+                  <span
+                    style={{
+                      background: h.urgent ? C.terraLight : C.amberLight,
+                      color: h.urgent ? C.terra : C.amber,
+                      fontSize: "0.64rem",
+                      fontWeight: 800,
+                      padding: "0.125rem 0.5rem",
+                      borderRadius: "1.25rem",
+                    }}
+                  >
                     {h.urgent ? "Urgent" : "Pending"}
                   </span>
                 </div>
@@ -356,21 +464,49 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           {panel("Inventory Alerts", <Archive size={13} color={C.sage} />, viewAll(() => setScreen("inventory")), (
             <div>
               {inventoryAlerts.map((a, i) => (
-                <div key={a.item} style={{ display: "flex", alignItems: "center",
-                  gap: "0.625rem", padding: "0.6875rem 1rem",
-                  borderBottom: i < inventoryAlerts.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-                  <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5625rem",
-                    background: a.qty === 0 ? C.terraLight : C.amberLight, flexShrink: 0,
-                    display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div
+                  key={a.item}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.625rem",
+                    padding: "0.6875rem 1rem",
+                    borderBottom:
+                      i < inventoryAlerts.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: "2rem",
+                      height: "2rem",
+                      borderRadius: "0.5625rem",
+                      background: a.qty === 0 ? C.terraLight : C.amberLight,
+                      flexShrink: 0,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
                     <Package size={14} color={a.qty === 0 ? C.terra : C.amber} />
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>{a.item}</div>
-                    <div style={{ fontSize: "0.66rem", color: C.muted }}>Qty: {a.qty}</div>
+                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
+                      {a.item}
+                    </div>
+                    <div style={{ fontSize: "0.66rem", color: C.muted }}>
+                      Qty: {a.qty}
+                    </div>
                   </div>
-                  <span style={{ background: a.qty === 0 ? C.terraLight : C.amberLight,
-                    color: a.qty === 0 ? C.terra : C.amber,
-                    fontSize: "0.64rem", fontWeight: 800, padding: "0.125rem 0.5rem", borderRadius: "1.25rem" }}>
+                  <span
+                    style={{
+                      background: a.qty === 0 ? C.terraLight : C.amberLight,
+                      color: a.qty === 0 ? C.terra : C.amber,
+                      fontSize: "0.64rem",
+                      fontWeight: 800,
+                      padding: "0.125rem 0.5rem",
+                      borderRadius: "1.25rem",
+                    }}
+                  >
                     {a.label}
                   </span>
                 </div>
@@ -394,11 +530,17 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                       {a.initials}
                     </div>
                     <div>
-                      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: C.brown }}>{a.name}</div>
-                      <div style={{ fontSize: "0.62rem", color: C.muted, ...mono }}>{a.when}</div>
+                      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: C.brown }}>
+                        {a.name}
+                      </div>
+                      <div style={{ fontSize: "0.62rem", color: C.muted, ...mono }}>
+                        {a.when}
+                      </div>
                     </div>
                   </div>
-                  <div style={{ fontSize: "0.74rem", color: C.brownLight, lineHeight: 1.4 }}>{a.sub}</div>
+                  <div style={{ fontSize: "0.74rem", color: C.brownLight, lineHeight: 1.4 }}>
+                    {a.sub}
+                  </div>
                 </div>
               ))}
             </div>
@@ -426,11 +568,15 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                     style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
                       color: C.white, border: "none", borderRadius: "0.5625rem", padding: "0.5rem 1.25rem",
                       fontWeight: 700, fontSize: "0.8rem", cursor: "pointer",
-                      fontFamily: "'Nunito', sans-serif" }}>Post</button>
+                      fontFamily: "'Nunito', sans-serif" }}>
+                    Post
+                  </button>
                   <button onClick={() => setShowAnnForm(false)}
                     style={{ background: C.creamDark, color: C.brownLight, border: "none",
                       borderRadius: "0.5625rem", padding: "0.5rem 0.875rem", fontWeight: 700, fontSize: "0.8rem",
-                      cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>Cancel</button>
+                      cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>
+                    Cancel
+                  </button>
                 </div>
               </div>
             ) : (
