@@ -52,6 +52,7 @@ export interface PlotInfo {
   id: number;
   plotNumber: string;
   state: PlotState;
+  needsHelp: boolean;
   owner?: string;
   since?: string;
 }

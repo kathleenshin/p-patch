@@ -50,6 +50,7 @@ export function DashboardScreen({
       return {
         id: plot.id,
         plotNumber: plot.plot_number,
+        needsHelp: plot.has_open_help_request,
         owner: primaryOwner?.name,
         since: primaryOwner?.start_date ?? undefined,
         state: plot.is_mine

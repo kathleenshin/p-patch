@@ -24,10 +24,20 @@ export function PlotGrid({
     { key: "mine", label: "My Plot" },
   ];
 
+  const matchesFilter = (plot: PlotInfo, key: FilterKey) => {
+    if (key === "all") {
+      return true;
+    }
+    if (key === "help-needed") {
+      return plot.needsHelp;
+    }
+    return plot.state === key;
+  };
+
   const visible =
     filter === "all"
       ? plots
-      : plots.filter((plot) => plot.state === filter);
+      : plots.filter((plot) => matchesFilter(plot, filter));
 
   const selected =
     plots.find((plot) => plot.id === selectedId) ?? null;
@@ -51,7 +61,7 @@ export function PlotGrid({
           const count =
             key === "all"
               ? plots.length
-              : plots.filter((plot) => plot.state === key).length;
+              : plots.filter((plot) => matchesFilter(plot, key)).length;
 
           const active = filter === key;
 

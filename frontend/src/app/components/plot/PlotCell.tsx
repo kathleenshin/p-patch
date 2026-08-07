@@ -110,7 +110,7 @@ export function PlotCell({
             <PlantIcon size={36} />
           )}
 
-          {plot.state === "help-needed" && (
+          {plot.needsHelp && (
             <AlertTriangle
               size={26}
               color="#FFFFFF"
