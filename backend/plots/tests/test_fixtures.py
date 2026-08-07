@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
 
-from plots.models import Garden, Plot, PlotNote
+from plots.models import Garden, GardenMembership, Plot, PlotNote, PlotOwnership
 
 
 User = get_user_model()
@@ -130,3 +130,48 @@ class BasePlotAPITestCase(BasePlotTestCase):
             "content": "Invalid visibility test.",
             "visibility": "not_a_real_choice",
         }
+
+    def create_plot(self, plot_number, garden=None, is_active=True):
+        """Create a plot in tests with sensible defaults."""
+
+        return Plot.objects.create(
+            garden=garden or self.garden,
+            plot_number=plot_number,
+            is_active=is_active,
+        )
+
+    def create_plot_note(
+        self,
+        *,
+        plot=None,
+        author=None,
+        content="Test note.",
+        visibility="this_plot",
+    ):
+        """Create a plot note for test scenarios."""
+
+        return PlotNote.objects.create(
+            plot=plot or self.plot,
+            author=author or self.user_one,
+            content=content,
+            visibility=visibility,
+        )
+
+    def add_active_plot_owner(self, *, plot=None, user=None, is_primary=False):
+        """Grant active ownership on a plot for visibility tests."""
+
+        return PlotOwnership.objects.create(
+            plot=plot or self.plot,
+            user=user or self.user_one,
+            is_primary=is_primary,
+        )
+
+    def add_active_garden_member(self, *, garden=None, user=None, role="community_volunteer"):
+        """Grant active garden membership for visibility tests."""
+
+        return GardenMembership.objects.create(
+            garden=garden or self.garden,
+            user=user or self.user_one,
+            role=role,
+            status="active",
+        )
