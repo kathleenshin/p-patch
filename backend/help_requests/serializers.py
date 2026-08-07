@@ -43,3 +43,14 @@ class HelpRequestSerializer(serializers.ModelSerializer):
         if self.context["request"].user.is_authenticated:
             validated_data["created_by"] = self.context["request"].user
         return super().create(validated_data)
+
+
+class HelpRequestAssigneeSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+        )

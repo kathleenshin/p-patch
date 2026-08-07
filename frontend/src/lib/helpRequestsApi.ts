@@ -52,6 +52,6 @@ export async function deleteHelpRequest(id: number): Promise<void> {
 }
 
 export async function fetchUsers(): Promise<UserOption[]> {
-  const data = await apiFetch<unknown>('/api/auth/users/');
+  const data = await apiFetch<unknown>('/api/help-requests/assignees/');
   return Array.isArray(data) ? (data as UserOption[]) : [];
 }
