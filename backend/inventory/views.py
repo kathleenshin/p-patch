@@ -1,7 +1,9 @@
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
+from users.permissions import IsApproved
 
 from .models import InventoryItem
 
@@ -59,7 +61,7 @@ def create_inventory_item(kwargs):
 
 
 @api_view(["GET", "POST"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated, IsApproved])
 def inventory_list(request):
     if request.method == "GET":
         items = InventoryItem.objects.select_related("added_by").prefetch_related("garden").order_by("-created_at")
@@ -78,7 +80,7 @@ def inventory_list(request):
 
 
 @api_view(["PUT", "DELETE"])
-@permission_classes([AllowAny])
+@permission_classes([IsAuthenticated, IsApproved])
 def inventory_detail(request, pk):
     try:
         inventory_item = InventoryItem.objects.get(pk=pk)
