@@ -1,7 +1,7 @@
 import { apiFetch } from "./api";
 import { clearTokens, setTokens } from "./authStorage";
 
-/** User shape returned by /api/auth/login|register|me (and admin pending list). */
+/** User shape returned by /api/auth/login|me (and admin pending list). */
 export type AuthUser = {
   id: number;
   email: string;
@@ -13,11 +13,17 @@ export type AuthUser = {
   date_joined?: string;
 };
 
-/** Successful login/register payload: JWTs + user profile. */
+/** Successful login / confirm-email payload: JWTs + user profile. */
 export type AuthResponse = {
   access: string;
   refresh: string;
   user: AuthUser;
+};
+
+/** Successful register payload — no tokens until email is confirmed. */
+export type RegisterResponse = {
+  detail: string;
+  email: string;
 };
 
 /** POST /api/auth/login/ — store tokens on success. */
@@ -33,13 +39,13 @@ export async function login(
   return data;
 }
 
-/** POST /api/auth/register/ — create account and store tokens on success. */
+/** POST /api/auth/register/ — create inactive account and send confirmation email. */
 export async function register(
   email: string,
   password: string,
   fullName = "",
-): Promise<AuthResponse> {
-  const data = await apiFetch<AuthResponse>("/api/auth/register/", {
+): Promise<RegisterResponse> {
+  return apiFetch<RegisterResponse>("/api/auth/register/", {
     method: "POST",
     body: {
       email,
@@ -47,8 +53,29 @@ export async function register(
       full_name: fullName,
     },
   });
+}
+
+/** POST /api/auth/confirm-email/ — activate account and store tokens. */
+export async function confirmEmail(
+  uid: string,
+  token: string,
+): Promise<AuthResponse> {
+  const data = await apiFetch<AuthResponse>("/api/auth/confirm-email/", {
+    method: "POST",
+    body: { uid, token },
+  });
   setTokens({ access: data.access, refresh: data.refresh });
   return data;
+}
+
+/** POST /api/auth/resend-confirmation/ — send another verify link. */
+export async function resendConfirmation(
+  email: string,
+): Promise<{ detail: string }> {
+  return apiFetch<{ detail: string }>("/api/auth/resend-confirmation/", {
+    method: "POST",
+    body: { email },
+  });
 }
 
 /** GET /api/auth/me/ — load the current user with a Bearer access token. */

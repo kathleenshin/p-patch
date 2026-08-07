@@ -12,11 +12,13 @@ vi.mock("@/lib/api", async () => {
 });
 
 import {
+  confirmEmail,
   fetchMe,
   login,
   logout,
   refreshAccessToken,
   register,
+  resendConfirmation,
 } from "@/lib/authApi";
 import { getAccessToken, getRefreshToken } from "@/lib/authStorage";
 
@@ -55,10 +57,13 @@ describe("authApi", () => {
     expect(getRefreshToken()).toBe("refresh-xyz");
   });
 
-  it("register posts full_name and stores tokens", async () => {
-    apiFetchMock.mockResolvedValueOnce(sampleAuthResponse);
+  it("register posts full_name and does not store tokens", async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      detail: "Account created. Check your email.",
+      email: "ada@example.com",
+    });
 
-    await register("ada@example.com", "password1", "Ada Lovelace");
+    const result = await register("ada@example.com", "password1", "Ada Lovelace");
 
     expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/register/", {
       method: "POST",
@@ -68,7 +73,31 @@ describe("authApi", () => {
         full_name: "Ada Lovelace",
       },
     });
+    expect(result.email).toBe("ada@example.com");
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it("confirmEmail stores tokens after activation", async () => {
+    apiFetchMock.mockResolvedValueOnce(sampleAuthResponse);
+
+    await confirmEmail("uid123", "token456");
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/confirm-email/", {
+      method: "POST",
+      body: { uid: "uid123", token: "token456" },
+    });
     expect(getAccessToken()).toBe("access-abc");
+  });
+
+  it("resendConfirmation posts email", async () => {
+    apiFetchMock.mockResolvedValueOnce({ detail: "If an unconfirmed account exists…" });
+
+    await resendConfirmation("ada@example.com");
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/resend-confirmation/", {
+      method: "POST",
+      body: { email: "ada@example.com" },
+    });
   });
 
   it("login surfaces ApiError from the API", async () => {

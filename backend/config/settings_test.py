@@ -1,10 +1,20 @@
 """Test settings: in-memory SQLite so tests never touch Neon."""
 
-from .settings import *  # noqa: F403
+from .settings import *  # noqa: F403, F401
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
         "NAME": ":memory:",
     }
+}
+
+# Auth suites register/resend many times from one IP; keep production rates elsewhere.
+REST_FRAMEWORK = {
+    **REST_FRAMEWORK,  # noqa: F405
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_register": "1000/min",
+        "auth_resend_ip": "1000/min",
+        "auth_resend_email": "1000/min",
+    },
 }
