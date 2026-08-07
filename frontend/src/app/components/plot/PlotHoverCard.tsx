@@ -15,7 +15,6 @@ export function PlotHoverCard({
   const col = plotColors[plot.state];
   const showOwner = !hideOwnerNames && Boolean(plot.owner);
   const isAvailable = plot.state === "available";
-  const isUnavailable = plot.state === "unavailable";
 
   return (
     <div
@@ -46,12 +45,11 @@ export function PlotHoverCard({
             ...mono,
             fontSize: "0.66rem",
             fontWeight: 700,
-            color:
-              isAvailable || isUnavailable
+            color: isAvailable
+              ? C.brownLight
+              : col.bg === C.white
                 ? C.brownLight
-                : col.bg === C.white
-                  ? C.brownLight
-                  : col.bg,
+                : col.bg,
             textTransform: "uppercase",
             letterSpacing: "0.06em",
           }}
@@ -77,10 +75,6 @@ export function PlotHoverCard({
       {isAvailable ? (
         <div style={{ color: C.muted, fontSize: "0.78rem" }}>
           No steward — available
-        </div>
-      ) : isUnavailable ? (
-        <div style={{ color: C.muted, fontSize: "0.78rem" }}>
-          This plot is currently unavailable
         </div>
       ) : (
         <>

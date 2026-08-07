@@ -19,7 +19,6 @@ export function PlotDetailPanel({
   const col = colByState[plot.state];
   const isMine = plot.state === "mine";
   const isAvailable = plot.state === "available";
-  const isUnavailable = plot.state === "unavailable";
   const showOwner = !hideOwnerNames && Boolean(plot.owner);
 
   return (
@@ -142,16 +141,6 @@ export function PlotDetailPanel({
           }}
         >
           This plot is unassigned and available.
-        </div>
-      ) : isUnavailable ? (
-        <div
-          style={{
-            fontSize: "0.78rem",
-            color: C.muted,
-            lineHeight: 1.5,
-          }}
-        >
-          This plot is currently unavailable.
         </div>
       ) : (
         <div

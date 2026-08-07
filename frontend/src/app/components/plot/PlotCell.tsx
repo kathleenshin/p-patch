@@ -22,9 +22,7 @@ export function PlotCell({
   const col = plotColors[plot.state];
   const isMine = plot.state === "mine";
 
-  const isEmptyState =
-    plot.state === "available" ||
-    plot.state === "unavailable";
+  const isEmptyState = plot.state === "available";
 
   return (
     <>

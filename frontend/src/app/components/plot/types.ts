@@ -4,8 +4,7 @@ export type PlotState =
   | "available"
   | "active"
   | "help-needed"
-  | "mine"
-  | "unavailable";
+  | "mine";
 
 export const plotColors: Record<
   PlotState,
@@ -40,12 +39,6 @@ export const plotColors: Record<
     text: C.white,
     label: "My Plot",
   },
-  unavailable: {
-    bg: "#EBEBEB",
-    border: "#C0C0C0",
-    text: "#777",
-    label: "Unavailable",
-  },
 };
 
 export const plotEmoji: Record<PlotState, string> = {
@@ -53,7 +46,6 @@ export const plotEmoji: Record<PlotState, string> = {
   active: "",
   "help-needed": "🟠",
   mine: "",
-  unavailable: "",
 };
 
 export interface PlotInfo {
