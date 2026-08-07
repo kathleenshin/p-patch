@@ -10,7 +10,7 @@ export function PlotGrid({
   hideOwnerNames = false,
 }: {
   plots: PlotInfo[];
-  onNavigate: () => void;
+  onNavigate: (plotId: number) => void;
   hideOwnerNames?: boolean;
 }) {
   const [filter, setFilter] = useState<FilterKey>("all");

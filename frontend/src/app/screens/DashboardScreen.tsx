@@ -32,8 +32,10 @@ const topTask = {
 
 export function DashboardScreen({
   setScreen,
+  setSelectedPlotId,
 }: {
   setScreen: (s: Screen) => void;
+  setSelectedPlotId: (plotId: number) => void;
 }) {
   const { isApproved } = useAuth();
   const { plots, plotsLoading, plotsError } = usePlots();
@@ -118,7 +120,10 @@ export function DashboardScreen({
             ) : (
               <PlotGrid
                 plots={plotData}
-                onNavigate={() => setScreen("plot")}
+                onNavigate={(plotId) => {
+                  setSelectedPlotId(plotId);
+                  setScreen("plot");
+                }}
                 hideOwnerNames={!isApproved}
               />
             )}
