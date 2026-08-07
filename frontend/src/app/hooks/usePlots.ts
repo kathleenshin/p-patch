@@ -12,6 +12,8 @@ export function usePlots() {
   useEffect(() => {
     async function loadPlots() {
       if (!accessToken) {
+        setPlots([]);
+        setPlotsError(null);
         setPlotsLoading(false);
         return;
       }
