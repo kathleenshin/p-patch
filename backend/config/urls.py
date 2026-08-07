@@ -28,5 +28,6 @@ urlpatterns = [
     path("api/auth/", include("users.urls")),
     path("api/", include("plots.urls")),
     path("api/help-requests/", include("help_requests.urls")),
-
+    path("api/announcements/", include("announcements.urls")),  # Community board list/create
 ]
+

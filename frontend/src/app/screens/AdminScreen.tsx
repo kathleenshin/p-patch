@@ -13,6 +13,8 @@ import {
 } from "@/lib/adminApi";
 import type { AuthUser } from "@/lib/authApi";
 import { ApiError, apiFetch } from "@/lib/api";
+// Garden-admin compose → Dashboard Community board.
+import { createAnnouncement } from "@/lib/announcementsApi";
 // Live Admin unclaimed-tasks panel + resend-claim action.
 import {
   fetchHelpRequests,
@@ -76,6 +78,10 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
   const [showAnnForm, setShowAnnForm] = useState(false);
   const [annText, setAnnText] = useState("");
+  // Compose-only feedback (Admin does not list announcements).
+  const [annPosting, setAnnPosting] = useState(false); // disables Post while create is in flight
+  const [annError, setAnnError] = useState<string | null>(null);
+  const [annSuccess, setAnnSuccess] = useState<string | null>(null); // shown after a successful create
   // Controls the full-list popup (pending today; other keys reserved for later panels).
   const [listModal, setListModal] = useState<AdminListModal>(null);
 
@@ -262,6 +268,37 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       );
     } finally {
       setResendingTaskId(null);
+    }
+  }
+
+  /** Post body to /api/announcements/ — appears on Dashboard Community board only. */
+  async function handlePostAnnouncement() {
+    if (!accessToken) return; // Admin requires JWT
+    const body = annText.trim();
+    // Reject empty posts before hitting the API.
+    if (!body) {
+      setAnnError("Write an announcement before posting.");
+      return;
+    }
+    setAnnPosting(true);
+    setAnnError(null);
+    setAnnSuccess(null);
+    try {
+      await createAnnouncement(accessToken, body);
+      // Clear the compose form; do not load/list posts here.
+      setAnnText("");
+      setShowAnnForm(false);
+      setAnnSuccess("Posted to the Dashboard Community board.");
+    } catch (err) {
+      setAnnError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Could not post announcement.",
+      );
+    } finally {
+      setAnnPosting(false);
     }
   }
 
@@ -672,9 +709,16 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           ))}
         </div>
 
-        {/* Community Announcements */}
+        {/* Community Announcements — compose only; posts appear on Dashboard Community board */}
         {panel("Community Announcements", <Newspaper size={13} color={C.sage} />,
-          <button onClick={() => setShowAnnForm(v => !v)}
+          <button
+            type="button"
+            onClick={() => {
+              // Toggle compose form; clear prior success/error banners.
+              setShowAnnForm((v) => !v);
+              setAnnError(null);
+              setAnnSuccess(null);
+            }}
             style={{ background: C.sage, color: C.white, border: "none",
               borderRadius: "0.4375rem", padding: "0.25rem 0.75rem", fontSize: "0.7rem", fontWeight: 700,
               cursor: "pointer", fontFamily: "'Nunito', sans-serif",
@@ -682,25 +726,59 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             <Plus size={11} /> New Announcement
           </button>,
           <div style={{ padding: "0.875rem 1rem" }}>
+            {/* Success after a create — Admin never lists the board feed */}
+            {annSuccess && (
+              <div style={{ marginBottom: "0.75rem", fontSize: "0.72rem", color: C.sage, fontWeight: 700 }}>
+                {annSuccess}
+              </div>
+            )}
+            {annError && (
+              <div style={{ marginBottom: "0.75rem", fontSize: "0.72rem", color: C.terra, fontWeight: 700 }}>
+                {annError}
+              </div>
+            )}
             {showAnnForm ? (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                <textarea value={annText} onChange={e => setAnnText(e.target.value)}
+                <textarea
+                  value={annText}
+                  onChange={(e) => setAnnText(e.target.value)}
                   placeholder="Write your announcement to the community…"
+                  disabled={annPosting}
                   style={{ ...inputStyle, minHeight: "4.5rem", resize: "vertical",
-                    fontFamily: "'Nunito', sans-serif" } as CSSProperties} />
+                    fontFamily: "'Nunito', sans-serif" } as CSSProperties}
+                />
                 <div style={{ display: "flex", gap: "0.5rem" }}>
-                  <button onClick={() => { setShowAnnForm(false); setAnnText(""); }}
+                  {/* POST /api/announcements/ (garden-admin JWT) */}
+                  <button
+                    type="button"
+                    disabled={annPosting}
+                    onClick={() => void handlePostAnnouncement()}
                     style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
                       color: C.white, border: "none", borderRadius: "0.5625rem", padding: "0.5rem 1.25rem",
-                      fontWeight: 700, fontSize: "0.8rem", cursor: "pointer",
-                      fontFamily: "'Nunito', sans-serif" }}>Post</button>
-                  <button onClick={() => setShowAnnForm(false)}
+                      fontWeight: 700, fontSize: "0.8rem",
+                      cursor: annPosting ? "wait" : "pointer", opacity: annPosting ? 0.7 : 1,
+                      fontFamily: "'Nunito', sans-serif" }}
+                  >
+                    {annPosting ? "Posting…" : "Post"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={annPosting}
+                    onClick={() => {
+                      setShowAnnForm(false);
+                      setAnnText("");
+                      setAnnError(null);
+                    }}
                     style={{ background: C.creamDark, color: C.brownLight, border: "none",
                       borderRadius: "0.5625rem", padding: "0.5rem 0.875rem", fontWeight: 700, fontSize: "0.8rem",
-                      cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>Cancel</button>
+                      cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             ) : (
+              // Idle state — no feed; Dashboard is the source of truth for posted news.
               <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.5rem 0" }}>
                 <div style={{ width: "2.25rem", height: "2.25rem", borderRadius: "0.625rem", background: C.sagePop,
                   flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -708,10 +786,11 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                 </div>
                 <div>
                   <div style={{ fontSize: "0.82rem", fontWeight: 600, color: C.brownMid }}>
-                    No announcements yet
+                    Post to the Community board
                   </div>
                   <div style={{ fontSize: "0.72rem", color: C.muted }}>
-                    Click "New Announcement" to post one for all members.
+                    Announcements appear on the Dashboard — this panel does not list them.
+                    Posts older than 30 days are removed automatically.
                   </div>
                 </div>
               </div>

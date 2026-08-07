@@ -72,6 +72,7 @@ INSTALLED_APPS = [
     'help_requests',
     'notifications',
     'weather',
+    'announcements',  # Dashboard Community board posts (Admin compose)
 ]
 
 MIDDLEWARE = [
