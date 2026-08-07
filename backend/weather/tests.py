@@ -1,8 +1,10 @@
 import requests
 from unittest.mock import Mock, patch
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from rest_framework_simplejwt.tokens import AccessToken
 
 from plots.models import Garden
 
@@ -77,6 +79,22 @@ class WeatherTestFixtures(TestCase):
 
 
 class WeatherViewTests(WeatherTestFixtures):
+    def setUp(self):
+        user = get_user_model().objects.create_user(
+            email="weather-test@example.com",
+            password="password123",
+        )
+        token = str(AccessToken.for_user(user))
+        self.client.defaults["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+
+    def test_requires_authentication(self):
+        response = self.client_class().get(
+            reverse("weather-forecast"),
+            {"garden_id": self.garden_with_coordinates.id},
+        )
+
+        self.assertEqual(response.status_code, 401)
+
     def test_requires_garden_id(self):
         response = self.client.get(reverse("weather-forecast"))
 
@@ -142,7 +160,7 @@ class WeatherViewTests(WeatherTestFixtures):
             response.json()["detail"],
             "Unable to retrieve weather data from Open-Meteo.",
         )
-        
+
     def test_requires_integer_garden_id(self):
         response = self.client.get(
             reverse("weather-forecast"),
