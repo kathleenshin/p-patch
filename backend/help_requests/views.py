@@ -55,5 +55,8 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         # Reuse the same notify helper as create.
-        sent = notify_new_help_request(help_request)
-        return Response({"detail": "Claim email resent.", "recipients": sent})
+        # notify returns address count (not Django send_mail's 0/1 message count).
+        recipient_count = notify_new_help_request(help_request)
+        return Response(
+            {"detail": "Claim email resent.", "recipients": recipient_count},
+        )
