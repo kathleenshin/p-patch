@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import {
-  Users, LayoutGrid, ClipboardList, Archive, AlertTriangle,
-  ChevronRight, Plus, Check, Newspaper, Package, X,
+  Users, UserCheck, LayoutGrid, ClipboardList, Archive, AlertTriangle,
+  ChevronRight, Plus, Package, X,
 } from "lucide-react";
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import type { Screen } from "../types";
@@ -9,6 +9,7 @@ import { useAuth } from "../auth/AuthContext";
 import {
   approveUser,
   fetchPendingUsers,
+  fetchUsers,
   rejectUser,
 } from "@/lib/adminApi";
 import type { AuthUser } from "@/lib/authApi";
@@ -90,13 +91,17 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [pendingLoading, setPendingLoading] = useState(true);
   const [pendingError, setPendingError] = useState<string | null>(null);
   const [actionUserId, setActionUserId] = useState<number | null>(null);
+  // Approved member count for the stat card beside Pending Registrations.
+  const [approvedMemberCount, setApprovedMemberCount] = useState(0);
 
   // Live unclaimed help requests (no assignee, not done).
   const [unclaimedTasks, setUnclaimedTasks] = useState<HelpRequest[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [resendingTaskId, setResendingTaskId] = useState<number | null>(null); // disables Resend while in flight
-  const [resendMessage, setResendMessage] = useState<string | null>(null); // success toast line above the list
+  // Per-task success line so a second identical resend still looks like feedback.
+  const [resendMessage, setResendMessage] = useState<string | null>(null);
+  const [resendMessageTaskId, setResendMessageTaskId] = useState<number | null>(null);
 
   // Live inventory alerts (numeric qty 0 = out; 1–LOW_STOCK_THRESHOLD = low).
   const [inventoryAlerts, setInventoryAlerts] = useState<InventoryAlert[]>([]);
@@ -125,6 +130,21 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
       );
     } finally {
       setPendingLoading(false);
+    }
+  }, [accessToken]);
+
+  // Count approved members from GET /api/auth/users/ (garden-admin only).
+  const loadApprovedMembers = useCallback(async () => {
+    if (!accessToken) {
+      setApprovedMemberCount(0);
+      return;
+    }
+    try {
+      const users = await fetchUsers(accessToken);
+      setApprovedMemberCount(users.filter((u) => u.is_approved).length);
+    } catch {
+      // Stat card only — leave last known count on soft failure.
+      setApprovedMemberCount(0);
     }
   }, [accessToken]);
 
@@ -193,6 +213,11 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     void loadPending();
   }, [loadPending]);
 
+  // Refresh approved-member count whenever the token is available.
+  useEffect(() => {
+    void loadApprovedMembers();
+  }, [loadApprovedMembers]);
+
   // Fetch unclaimed tasks whenever the auth token is available.
   useEffect(() => {
     void loadUnclaimedTasks();
@@ -211,6 +236,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     try {
       await approveUser(accessToken, userId);
       await loadPending();
+      await loadApprovedMembers(); // pending → approved moves the member count
     } catch (err) {
       setPendingError(
         err instanceof ApiError
@@ -248,17 +274,29 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   /** Resend claim-notification email to all active garden members (admin only; no assign). */
   async function handleResendClaim(taskId: number) {
     if (!accessToken) return;
+    // Resolve title from state (coerce id — API/JSON may yield string ids).
+    const taskTitle = unclaimedTasks
+      .find((t) => Number(t.id) === Number(taskId))
+      ?.title?.trim();
     setResendingTaskId(taskId);
     setTasksError(null);
     setResendMessage(null);
+    setResendMessageTaskId(null);
     try {
       const result = await resendHelpRequestClaim(accessToken, taskId);
-      setResendMessage(
-        result.recipients > 0
-          ? `Claim email resent (${result.recipients} recipients).`
-          : result.detail,
-      );
+      const n = result.recipients;
+      setResendMessageTaskId(taskId);
+      if (n > 0) {
+        setResendMessage(
+          taskTitle
+            ? `Resent “${taskTitle}” to ${n} active garden member${n === 1 ? "" : "s"}`
+            : `Resent to ${n} active garden member${n === 1 ? "" : "s"}`,
+        );
+      } else {
+        setResendMessage(result.detail);
+      }
     } catch (err) {
+      setResendMessageTaskId(taskId);
       setTasksError(
         err instanceof ApiError
           ? err.message
@@ -302,15 +340,23 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     }
   }
 
-  const statCards = [
+  const statCards: {
+    label: string;
+    value: number;
+    color: string;
+    Icon: typeof Users;
+    action: () => void;
+    hint?: string;
+  }[] = [
     // Pending opens the full-list modal; other cards still navigate to member screens.
-    { label: "Pending Registrations", value: pendingUsers.length, color: C.terra,    Icon: Users,         action: () => setListModal("pending") },
-    { label: "Unassigned Plots",       value: 3, color: C.amber,   Icon: LayoutGrid,    action: () => setScreen("plot") },
+    { label: "Pending Registrations", value: pendingUsers.length, color: C.terra, Icon: Users, action: () => setListModal("pending") },
+    // Live approved count from GET /api/auth/users/ — sits beside Pending.
+    { label: "Approved Members", value: approvedMemberCount, color: C.sage, Icon: UserCheck, action: () => {}, hint: "Garden members" },
+    { label: "Unassigned Plots", value: 3, color: C.amber, Icon: LayoutGrid, action: () => setScreen("plot") },
     // Live unclaimed count; opens the tasks View-all modal.
-    { label: "Unclaimed Tasks",        value: unclaimedTasks.length, color: C.lavender, Icon: ClipboardList, action: () => setListModal("tasks") },
+    { label: "Unclaimed Tasks", value: unclaimedTasks.length, color: C.lavender, Icon: ClipboardList, action: () => setListModal("tasks") },
     // Live inventory alert count; opens the inventory View-all modal.
-    { label: "Inventory Alerts",       value: inventoryAlerts.length, color: C.sky,     Icon: Archive,       action: () => setListModal("inventory") },
-    { label: "Flagged Content",        value: 0, color: C.sage,    Icon: AlertTriangle, action: () => {} },
+    { label: "Inventory Alerts", value: inventoryAlerts.length, color: C.sky, Icon: Archive, action: () => setListModal("inventory") },
   ];
 
   const inventoryAlerts = [
@@ -322,13 +368,6 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     { id: 5,  zone: "North" },
     { id: 12, zone: "South" },
     { id: 21, zone: "East"  },
-  ];
-
-  const recentActivity = [
-    { name: "Kate A.",  sub: "Approved John S.",        when: "10m ago",   initials: "KA", color: C.sage     },
-    { name: "Plot 2",   sub: "Assigned to Maria K.",    when: "1h ago",    initials: "P2", color: C.amber    },
-    { name: "John S.",  sub: '"Close Shed" marked done', when: "2h ago",   initials: "JS", color: C.terra    },
-    { name: "Mary K.",  sub: "New announcement posted", when: "Yesterday", initials: "MK", color: C.lavender },
   ];
 
   const panel = (
@@ -459,47 +498,56 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     }
     return (
       <>
-        {/* Shown after a successful resend-claim call */}
-        {resendMessage && (
-          <div style={{ padding: "0.75rem 1rem 0", fontSize: "0.72rem", color: C.sage, fontWeight: 700 }}>
-            {resendMessage}
-          </div>
-        )}
         {unclaimedTasks.map((task, i) => {
           const highPriority = task.priority === "high";
+          // Only the in-flight row shows Sending…; others stay clickable.
           const busy = resendingTaskId === task.id;
+          const anySending = resendingTaskId != null;
+          const justSent =
+            resendMessageTaskId != null &&
+            Number(resendMessageTaskId) === Number(task.id) &&
+            Boolean(resendMessage);
           return (
-            <div key={task.id} style={{ display: "flex", alignItems: "center",
-              gap: "0.625rem", padding: "0.6875rem 1rem",
-              borderBottom: i < unclaimedTasks.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown, marginBottom: "0.125rem" }}>
-                  {task.title}
+            <div key={task.id} style={{
+              padding: "0.6875rem 1rem",
+              borderBottom: i < unclaimedTasks.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown, marginBottom: "0.125rem" }}>
+                    {task.title}
+                  </div>
+                  <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>
+                    {formatDueDate(task.due_date)}
+                  </div>
                 </div>
-                <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>
-                  {formatDueDate(task.due_date)}
-                </div>
+                {/* Priority badge — high uses terra, otherwise amber */}
+                <span style={{
+                  background: highPriority ? C.terraLight : C.amberLight,
+                  color: highPriority ? C.terra : C.amber,
+                  fontSize: "0.64rem", fontWeight: 800, padding: "0.125rem 0.5rem", borderRadius: "1.25rem",
+                  textTransform: "capitalize",
+                }}>
+                  {task.priority}
+                </span>
+                {/* Admin can only resend claim email — no assignee picker */}
+                <button
+                  type="button"
+                  disabled={anySending}
+                  onClick={() => void handleResendClaim(task.id)}
+                  style={{ background: C.sageLight, color: C.lavender, border: "none",
+                    borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
+                    cursor: anySending ? "wait" : "pointer", opacity: anySending && !busy ? 0.55 : busy ? 0.7 : 1,
+                    fontFamily: "'Nunito', sans-serif", whiteSpace: "nowrap" }}>
+                  {busy ? "Sending…" : "Resend claim email"}
+                </button>
               </div>
-              {/* Priority badge — high uses terra, otherwise amber */}
-              <span style={{
-                background: highPriority ? C.terraLight : C.amberLight,
-                color: highPriority ? C.terra : C.amber,
-                fontSize: "0.64rem", fontWeight: 800, padding: "0.125rem 0.5rem", borderRadius: "1.25rem",
-                textTransform: "capitalize",
-              }}>
-                {task.priority}
-              </span>
-              {/* Admin can only resend claim email — no assignee picker */}
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void handleResendClaim(task.id)}
-                style={{ background: C.sageLight, color: C.lavender, border: "none",
-                  borderRadius: "0.4375rem", padding: "0.25rem 0.625rem", fontSize: "0.68rem", fontWeight: 800,
-                  cursor: busy ? "wait" : "pointer", opacity: busy ? 0.7 : 1,
-                  fontFamily: "'Nunito', sans-serif", whiteSpace: "nowrap" }}>
-                {busy ? "Sending…" : "Resend claim email"}
-              </button>
+              {/* Per-row success so the next task’s resend is obviously acknowledged */}
+              {justSent && (
+                <div style={{ marginTop: "0.375rem", fontSize: "0.66rem", color: C.sage, fontWeight: 700 }}>
+                  {resendMessage}
+                </div>
+              )}
             </div>
           );
         })}
@@ -587,26 +635,46 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
         {/* Page header */}
         <div style={{ display: "flex", alignItems: "center",
-          justifyContent: "space-between", marginBottom: "1.25rem" }}>
+          justifyContent: "space-between", marginBottom: "1.25rem", gap: "1rem", flexWrap: "wrap" }}>
           <div>
             <h1 style={{ ...serif, fontSize: "1.4rem", fontWeight: 700,
               color: C.brown, margin: "0 0 0.1875rem" }}>Admin Dashboard</h1>
             <p style={{ fontSize: "0.76rem", color: C.muted, margin: 0 }}>
               Overview of what needs your attention and recent community activity
             </p>
+            {/* Compose feedback after posting from the header button */}
+            {annSuccess && (
+              <div style={{ marginTop: "0.5rem", fontSize: "0.72rem", color: C.sage, fontWeight: 700 }}>
+                {annSuccess}
+              </div>
+            )}
+            {annError && !showAnnForm && (
+              <div style={{ marginTop: "0.5rem", fontSize: "0.72rem", color: C.terra, fontWeight: 700 }}>
+                {annError}
+              </div>
+            )}
           </div>
-          <button style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
-            color: C.white, border: "none", borderRadius: "0.625rem", padding: "0.5rem 1rem",
-            fontWeight: 700, fontSize: "0.8rem", cursor: "pointer",
-            fontFamily: "'Nunito', sans-serif",
-            display: "flex", alignItems: "center", gap: "0.375rem" }}>
-            <Plus size={14} /> New Activity
+          {/* Opens compose modal — posts go to Dashboard Community board */}
+          <button
+            type="button"
+            onClick={() => {
+              setShowAnnForm(true);
+              setAnnError(null);
+              setAnnSuccess(null);
+            }}
+            style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
+              color: C.white, border: "none", borderRadius: "0.625rem", padding: "0.5rem 1rem",
+              fontWeight: 700, fontSize: "0.8rem", cursor: "pointer",
+              fontFamily: "'Nunito', sans-serif",
+              display: "flex", alignItems: "center", gap: "0.375rem" }}
+          >
+            <Plus size={14} /> New Announcement
           </button>
         </div>
 
         {/* Stat cards */}
         <div className="admin-stat-row" style={{ marginBottom: "1.125rem" }}>
-          {statCards.map(({ label, value, color, Icon, action }) => (
+          {statCards.map(({ label, value, color, Icon, action, hint }) => (
             <button key={label} type="button" onClick={action}
               style={{ background: C.card, border: `0.0625rem solid ${C.border}`,
                 borderRadius: "0.875rem", padding: "1rem 1rem 0.875rem",
@@ -629,7 +697,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
               <div style={{ fontSize: "0.72rem", color: C.brownLight,
                 fontWeight: 600, lineHeight: 1.3 }}>{label}</div>
               <div style={{ fontSize: "0.66rem", color: color, fontWeight: 700 }}>
-                {value === 0 ? "All clear" : "View →"}
+                {hint ?? (value === 0 ? "All clear" : "View →")}
               </div>
             </button>
           ))}
@@ -683,122 +751,118 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
           ))}
         </div>
 
-        {/* Recent Activity — full width horizontal */}
-        <div style={{ marginBottom: "0.875rem" }}>
-          {panel("Recent Activity", <Check size={13} color={C.sage} />, viewAll(), (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)" }}>
-              {recentActivity.map((a, i) => (
-                <div key={i} style={{ padding: "0.875rem 1rem",
-                  borderRight: i < recentActivity.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem" }}>
-                    <div style={{ width: "2rem", height: "2rem", borderRadius: "50%",
-                      background: a.color, flexShrink: 0,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      color: C.white, fontWeight: 800, fontSize: "0.62rem" }}>
-                      {a.initials}
-                    </div>
-                    <div>
-                      <div style={{ fontSize: "0.78rem", fontWeight: 700, color: C.brown }}>{a.name}</div>
-                      <div style={{ fontSize: "0.62rem", color: C.muted, ...mono }}>{a.when}</div>
-                    </div>
-                  </div>
-                  <div style={{ fontSize: "0.74rem", color: C.brownLight, lineHeight: 1.4 }}>{a.sub}</div>
-                </div>
-              ))}
-            </div>
-          ))}
-        </div>
-
-        {/* Community Announcements — compose only; posts appear on Dashboard Community board */}
-        {panel("Community Announcements", <Newspaper size={13} color={C.sage} />,
-          <button
-            type="button"
-            onClick={() => {
-              // Toggle compose form; clear prior success/error banners.
-              setShowAnnForm((v) => !v);
-              setAnnError(null);
-              setAnnSuccess(null);
-            }}
-            style={{ background: C.sage, color: C.white, border: "none",
-              borderRadius: "0.4375rem", padding: "0.25rem 0.75rem", fontSize: "0.7rem", fontWeight: 700,
-              cursor: "pointer", fontFamily: "'Nunito', sans-serif",
-              display: "flex", alignItems: "center", gap: "0.25rem" }}>
-            <Plus size={11} /> New Announcement
-          </button>,
-          <div style={{ padding: "0.875rem 1rem" }}>
-            {/* Success after a create — Admin never lists the board feed */}
-            {annSuccess && (
-              <div style={{ marginBottom: "0.75rem", fontSize: "0.72rem", color: C.sage, fontWeight: 700 }}>
-                {annSuccess}
-              </div>
-            )}
-            {annError && (
-              <div style={{ marginBottom: "0.75rem", fontSize: "0.72rem", color: C.terra, fontWeight: 700 }}>
-                {annError}
-              </div>
-            )}
-            {showAnnForm ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                <textarea
-                  value={annText}
-                  onChange={(e) => setAnnText(e.target.value)}
-                  placeholder="Write your announcement to the community…"
-                  disabled={annPosting}
-                  style={{ ...inputStyle, minHeight: "4.5rem", resize: "vertical",
-                    fontFamily: "'Nunito', sans-serif" } as CSSProperties}
-                />
-                <div style={{ display: "flex", gap: "0.5rem" }}>
-                  {/* POST /api/announcements/ (garden-admin JWT) */}
-                  <button
-                    type="button"
-                    disabled={annPosting}
-                    onClick={() => void handlePostAnnouncement()}
-                    style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
-                      color: C.white, border: "none", borderRadius: "0.5625rem", padding: "0.5rem 1.25rem",
-                      fontWeight: 700, fontSize: "0.8rem",
-                      cursor: annPosting ? "wait" : "pointer", opacity: annPosting ? 0.7 : 1,
-                      fontFamily: "'Nunito', sans-serif" }}
-                  >
-                    {annPosting ? "Posting…" : "Post"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={annPosting}
-                    onClick={() => {
-                      setShowAnnForm(false);
-                      setAnnText("");
-                      setAnnError(null);
-                    }}
-                    style={{ background: C.creamDark, color: C.brownLight, border: "none",
-                      borderRadius: "0.5625rem", padding: "0.5rem 0.875rem", fontWeight: 700, fontSize: "0.8rem",
-                      cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              // Idle state — no feed; Dashboard is the source of truth for posted news.
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.5rem 0" }}>
-                <div style={{ width: "2.25rem", height: "2.25rem", borderRadius: "0.625rem", background: C.sagePop,
-                  flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <Newspaper size={18} color={C.sage} />
-                </div>
-                <div>
-                  <div style={{ fontSize: "0.82rem", fontWeight: 600, color: C.brownMid }}>
-                    Post to the Community board
-                  </div>
-                  <div style={{ fontSize: "0.72rem", color: C.muted }}>
-                    Announcements appear on the Dashboard — this panel does not list them.
-                    Posts older than 30 days are removed automatically.
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
       </div>
+
+      {/* Compose announcement modal — posts to Dashboard Community board only */}
+      {showAnnForm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="New announcement"
+          onClick={() => {
+            if (annPosting) return;
+            setShowAnnForm(false);
+            setAnnText("");
+            setAnnError(null);
+          }}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(44,31,20,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 40,
+            padding: "1rem",
+          }}
+        >
+          {/* stopPropagation so clicks inside the card do not close the modal */}
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: C.card,
+              borderRadius: "1.375rem",
+              width: "min(92%, 28rem)",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 1rem 3rem rgba(44,31,20,0.25)",
+              border: `0.125rem solid ${C.border}`,
+              overflow: "hidden",
+            }}
+          >
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "1rem 1.25rem",
+              borderBottom: `0.0625rem solid ${C.border}`,
+            }}>
+              <h3 style={{ ...serif, fontSize: "1.05rem", fontWeight: 700, color: C.brown, margin: 0 }}>
+                New Announcement
+              </h3>
+              <button
+                type="button"
+                disabled={annPosting}
+                onClick={() => {
+                  setShowAnnForm(false);
+                  setAnnText("");
+                  setAnnError(null);
+                }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.muted }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div style={{ padding: "1rem 1.25rem", display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+              <p style={{ margin: 0, fontSize: "0.72rem", color: C.muted }}>
+                Posted to the Dashboard Community board. This screen does not list announcements.
+              </p>
+              {annError && (
+                <div style={{ fontSize: "0.72rem", color: C.terra, fontWeight: 700 }}>
+                  {annError}
+                </div>
+              )}
+              <textarea
+                value={annText}
+                onChange={(e) => setAnnText(e.target.value)}
+                placeholder="Write your announcement to the community…"
+                disabled={annPosting}
+                style={{ ...inputStyle, minHeight: "6rem", resize: "vertical",
+                  fontFamily: "'Nunito', sans-serif" } as CSSProperties}
+              />
+              <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
+                <button
+                  type="button"
+                  disabled={annPosting}
+                  onClick={() => {
+                    setShowAnnForm(false);
+                    setAnnText("");
+                    setAnnError(null);
+                  }}
+                  style={{ background: C.creamDark, color: C.brownLight, border: "none",
+                    borderRadius: "0.5625rem", padding: "0.5rem 0.875rem", fontWeight: 700, fontSize: "0.8rem",
+                    cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}
+                >
+                  Cancel
+                </button>
+                {/* POST /api/announcements/ (garden-admin JWT) */}
+                <button
+                  type="button"
+                  disabled={annPosting}
+                  onClick={() => void handlePostAnnouncement()}
+                  style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
+                    color: C.white, border: "none", borderRadius: "0.5625rem", padding: "0.5rem 1.25rem",
+                    fontWeight: 700, fontSize: "0.8rem",
+                    cursor: annPosting ? "wait" : "pointer", opacity: annPosting ? 0.7 : 1,
+                    fontFamily: "'Nunito', sans-serif" }}
+                >
+                  {annPosting ? "Posting…" : "Post"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Full pending list modal (stat card / View all). Backdrop click closes. */}
       {listModal === "pending" && (
