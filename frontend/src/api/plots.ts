@@ -19,9 +19,11 @@ export interface PlotRecord {
 }
 
 export async function fetchPlots(
-  token: string | null
+  token: string | null,
+  signal?: AbortSignal,
 ): Promise<PlotRecord[]> {
   return apiFetch<PlotRecord[]>("/api/plots/", {
     token,
+    signal,
   });
 }

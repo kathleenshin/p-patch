@@ -10,6 +10,9 @@ export function usePlots() {
   const [plotsError, setPlotsError] = useState<string | null>(null);
 
   useEffect(() => {
+    let ignore = false;
+    const controller = new AbortController();
+
     async function loadPlots() {
       if (!accessToken) {
         setPlots([]);
@@ -22,18 +25,37 @@ export function usePlots() {
         setPlotsLoading(true);
         setPlotsError(null);
 
-        const data = await fetchPlots(accessToken);
-        setPlots(data);
-      } catch (error) {
-        setPlotsError(
-          error instanceof Error ? error.message : "Unable to load plots."
+        const data = await fetchPlots(
+          accessToken,
+          controller.signal,
         );
+
+        if (!ignore) {
+          setPlots(data);
+        }
+      } catch (error) {
+        const aborted =
+          error instanceof DOMException &&
+          error.name === "AbortError";
+
+        if (!aborted && !ignore) {
+          setPlotsError(
+            error instanceof Error ? error.message : "Unable to load plots."
+          );
+        }
       } finally {
-        setPlotsLoading(false);
+        if (!ignore) {
+          setPlotsLoading(false);
+        }
       }
     }
 
     void loadPlots();
+
+    return () => {
+      ignore = true;
+      controller.abort();
+    };
   }, [accessToken]);
 
   return {
