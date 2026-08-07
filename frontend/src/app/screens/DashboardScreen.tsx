@@ -6,6 +6,7 @@ import { WeekWeatherWidget } from "../components/weather/WeekWeatherWidget";
 import { PlotGrid } from "../components/plot/PlotGrid";
 import dashboardIcon from "../../imports/DashboardHouseIcon.jpg";
 import { useAuth } from "../auth/AuthContext";
+import { usePlots } from "../hooks/usePlots";
 
 
 const newsFeed = [
@@ -27,6 +28,11 @@ const topTask = {
 
 export function DashboardScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { isApproved } = useAuth();
+  const { plots, plotsLoading, plotsError } = usePlots();
+
+  console.log("plots:", plots);
+  console.log("plotsLoading:", plotsLoading);
+  console.log("plotsError:", plotsError);
 
   return (
     <div style={{ display: "flex", flex: 1, overflow: "hidden", background: C.cream, ...sans,
