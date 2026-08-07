@@ -1,7 +1,17 @@
-from rest_framework import permissions, viewsets
+from rest_framework import generics, permissions, viewsets
 
 from .models import HelpRequest
-from .serializers import HelpRequestSerializer
+from .serializers import HelpRequestAssigneeSerializer, HelpRequestSerializer
+from users.models import User
+from users.permissions import IsApproved
+
+
+class HelpRequestAssigneeListView(generics.ListAPIView):
+    permission_classes = [IsApproved]
+    serializer_class = HelpRequestAssigneeSerializer
+
+    def get_queryset(self):
+        return User.objects.filter(is_approved=True).order_by("email")
 
 
 class HelpRequestViewSet(viewsets.ModelViewSet):
