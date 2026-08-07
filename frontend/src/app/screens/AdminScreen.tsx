@@ -6,14 +6,13 @@ import {
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import type { Screen } from "../types";
 import { useAuth } from "../auth/AuthContext";
-import { usePlots } from "../hooks/usePlots";
 import {
   approveUser,
   fetchPendingUsers,
   rejectUser,
 } from "@/lib/adminApi";
 import type { AuthUser } from "@/lib/authApi";
-import { ApiError } from "@/lib/api";
+import { ApiError, apiFetch } from "@/lib/api";
 // Live Admin unclaimed-tasks panel + resend-claim action.
 import {
   fetchHelpRequests,
@@ -93,6 +92,11 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [resendingTaskId, setResendingTaskId] = useState<number | null>(null); // disables Resend while in flight
   const [resendMessage, setResendMessage] = useState<string | null>(null); // success toast line above the list
 
+  // Live inventory alerts (numeric qty 0 = out; 1–LOW_STOCK_THRESHOLD = low).
+  const [inventoryAlerts, setInventoryAlerts] = useState<InventoryAlert[]>([]);
+  const [inventoryLoading, setInventoryLoading] = useState(true);
+  const [inventoryError, setInventoryError] = useState<string | null>(null);
+
   const loadPending = useCallback(async () => {
     if (!accessToken) {
       setPendingUsers([]);
@@ -144,6 +148,41 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     }
   }, [accessToken]);
 
+  // Load inventory list and keep only out-of-stock / low-stock rows.
+  const loadInventoryAlerts = useCallback(async () => {
+    // Admin is gated; wait for JWT before hitting the inventory list.
+    if (!accessToken) {
+      setInventoryAlerts([]);
+      setInventoryLoading(false);
+      return;
+    }
+    setInventoryLoading(true);
+    setInventoryError(null);
+    try {
+      // GET /api/inventory/ — filter client-side; token optional on AllowAny, ready for IsApproved.
+      const items = await apiFetch<InventoryItemRow[]>("/api/inventory/", {
+        token: accessToken,
+      });
+      // Drop rows that are in stock or have non-numeric quantities.
+      setInventoryAlerts(
+        items
+          .map(toInventoryAlert)
+          .filter((alert): alert is InventoryAlert => alert != null),
+      );
+    } catch (err) {
+      setInventoryAlerts([]);
+      setInventoryError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Could not load inventory alerts.",
+      );
+    } finally {
+      setInventoryLoading(false);
+    }
+  }, [accessToken]);
+
   useEffect(() => {
     void loadPending();
   }, [loadPending]);
@@ -152,6 +191,11 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   useEffect(() => {
     void loadUnclaimedTasks();
   }, [loadUnclaimedTasks]);
+
+  // Fetch inventory alerts whenever the auth token is available.
+  useEffect(() => {
+    void loadInventoryAlerts();
+  }, [loadInventoryAlerts]);
 
   /** Approve then refresh the pending list. */
   async function handleApprove(userId: number) {
@@ -224,16 +268,23 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const statCards = [
     // Pending opens the full-list modal; other cards still navigate to member screens.
     { label: "Pending Registrations", value: pendingUsers.length, color: C.terra,    Icon: Users,         action: () => setListModal("pending") },
-    { label: "Unassigned Plots",      value: unassignedPlots.length, color: C.amber, Icon: LayoutGrid,   action: () => setScreen("plot") },
+    { label: "Unassigned Plots",       value: 3, color: C.amber,   Icon: LayoutGrid,    action: () => setScreen("plot") },
     // Live unclaimed count; opens the tasks View-all modal.
     { label: "Unclaimed Tasks",        value: unclaimedTasks.length, color: C.lavender, Icon: ClipboardList, action: () => setListModal("tasks") },
-    { label: "Inventory Alerts",       value: 1, color: C.sky,     Icon: Archive,       action: () => setScreen("inventory") },
+    // Live inventory alert count; opens the inventory View-all modal.
+    { label: "Inventory Alerts",       value: inventoryAlerts.length, color: C.sky,     Icon: Archive,       action: () => setListModal("inventory") },
     { label: "Flagged Content",        value: 0, color: C.sage,    Icon: AlertTriangle, action: () => {} },
   ];
 
   const inventoryAlerts = [
     { item: "Wheelbarrow",        qty: 0, label: "Out of stock" },
     { item: "Organic Fertilizer", qty: 2, label: "Low stock"    },
+  ];
+
+  const unassignedPlots = [
+    { id: 5,  zone: "North" },
+    { id: 12, zone: "South" },
+    { id: 21, zone: "East"  },
   ];
 
   const recentActivity = [
@@ -419,6 +470,80 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     );
   }
 
+  // Shared inventory-alert rows for the dashboard panel and the View-all modal.
+  function renderInventoryAlertsList() {
+    if (inventoryLoading) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+          Loading inventory alerts…
+        </div>
+      );
+    }
+    if (inventoryError) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.terra, fontWeight: 600 }}>
+          {inventoryError}
+        </div>
+      );
+    }
+    if (inventoryAlerts.length === 0) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+          No inventory alerts.
+        </div>
+      );
+    }
+    return inventoryAlerts.map((a, i) => {
+      // Terra = out of stock; amber = low stock (matches prior mock styling).
+      const outOfStock = a.label === "Out of stock";
+      return (
+        <div
+          key={a.id}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.625rem",
+            padding: "0.6875rem 1rem",
+            borderBottom:
+              i < inventoryAlerts.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+          }}
+        >
+          <div
+            style={{
+              width: "2rem",
+              height: "2rem",
+              borderRadius: "0.5625rem",
+              background: outOfStock ? C.terraLight : C.amberLight,
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Package size={14} color={outOfStock ? C.terra : C.amber} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>{a.item}</div>
+            <div style={{ fontSize: "0.66rem", color: C.muted }}>Qty: {a.quantity}</div>
+          </div>
+          {/* Severity badge — same labels as the mock Inventory Alerts panel */}
+          <span
+            style={{
+              background: outOfStock ? C.terraLight : C.amberLight,
+              color: outOfStock ? C.terra : C.amber,
+              fontSize: "0.64rem",
+              fontWeight: 800,
+              padding: "0.125rem 0.5rem",
+              borderRadius: "1.25rem",
+            }}
+          >
+            {a.label}
+          </span>
+        </div>
+      );
+    });
+  }
+
   return (
     <div style={{ flex: 1, overflow: "auto", background: C.cream, ...sans }}>
       <div className="page-content">
@@ -476,6 +601,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         {/* 2x2 panel grid */}
         <div className="admin-panel-grid" style={{ marginBottom: "0.875rem" }}>
 
+        {/* Live pending queue from GET /api/auth/pending/ */}
           {/* View all opens the full pending list in a modal */}
           {panel("Pending Registrations", <Users size={13} color={C.sage} />, viewAll(() => setListModal("pending")), (
             <div>
@@ -485,74 +611,23 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
           {panel("Unassigned Plots", <LayoutGrid size={13} color={C.sage} />, viewAll(() => setScreen("plot")), (
             <div>
-              {plotsLoading ? (
-                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
-                  Loading plots…
-                </div>
-              ) : plotsError ? (
-                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.terra, fontWeight: 600 }}>
-                  {plotsError}
-                </div>
-              ) : unassignedPlots.length === 0 ? (
-                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
-                  No unassigned plots.
-                </div>
-              ) : (
-                unassignedPlots.map((p, i) => (
-                  <div
-                    key={p.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.625rem",
-                      padding: "0.6875rem 1rem",
-                      borderBottom:
-                        i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: "2rem",
-                        height: "2rem",
-                        borderRadius: "0.5625rem",
-                        background: C.sageLight,
-                        flexShrink: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <LayoutGrid size={14} color={C.sage} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
-                        Plot {p.plot_number}
-                      </div>
-                      <div style={{ fontSize: "0.66rem", color: C.muted }}>
-                        {p.garden_name}
-                      </div>
-                    </div>
-                    <button
-                      disabled
-                      title="Plot assignment is not implemented yet"
-                      style={{
-                        background: C.amberLight,
-                        color: C.amber,
-                        border: "none",
-                        borderRadius: "0.4375rem",
-                        padding: "0.25rem 0.75rem",
-                        fontSize: "0.68rem",
-                        fontWeight: 800,
-                        cursor: "not-allowed",
-                        opacity: 0.6,
-                        fontFamily: "'Nunito', sans-serif",
-                      }}
-                    >
-                      Assign
-                    </button>
+              {unassignedPlots.map((p, i) => (
+                <div key={p.id} style={{ display: "flex", alignItems: "center",
+                  gap: "0.625rem", padding: "0.6875rem 1rem",
+                  borderBottom: i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
+                  <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5625rem", background: C.sageLight,
+                    flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <LayoutGrid size={14} color={C.sage} />
                   </div>
-                ))
-              )}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>Plot {p.id}</div>
+                    <div style={{ fontSize: "0.66rem", color: C.muted }}>{p.zone} Zone</div>
+                  </div>
+                  <button style={{ background: C.amberLight, color: C.amber, border: "none",
+                    borderRadius: "0.4375rem", padding: "0.25rem 0.75rem", fontSize: "0.68rem", fontWeight: 800,
+                    cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>Assign</button>
+                </div>
+              ))}
             </div>
           ))}
 
@@ -563,28 +638,10 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             </div>
           ))}
 
-          {panel("Inventory Alerts", <Archive size={13} color={C.sage} />, viewAll(() => setScreen("inventory")), (
+          {/* Live inventory alerts — out of stock / low stock from GET /api/inventory/ */}
+          {panel("Inventory Alerts", <Archive size={13} color={C.sage} />, viewAll(() => setListModal("inventory")), (
             <div>
-              {inventoryAlerts.map((a, i) => (
-                <div key={a.item} style={{ display: "flex", alignItems: "center",
-                  gap: "0.625rem", padding: "0.6875rem 1rem",
-                  borderBottom: i < inventoryAlerts.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-                  <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5625rem",
-                    background: a.qty === 0 ? C.terraLight : C.amberLight, flexShrink: 0,
-                    display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <Package size={14} color={a.qty === 0 ? C.terra : C.amber} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>{a.item}</div>
-                    <div style={{ fontSize: "0.66rem", color: C.muted }}>Qty: {a.qty}</div>
-                  </div>
-                  <span style={{ background: a.qty === 0 ? C.terraLight : C.amberLight,
-                    color: a.qty === 0 ? C.terra : C.amber,
-                    fontSize: "0.64rem", fontWeight: 800, padding: "0.125rem 0.5rem", borderRadius: "1.25rem" }}>
-                    {a.label}
-                  </span>
-                </div>
-              ))}
+              {renderInventoryAlertsList()}
             </div>
           ))}
         </div>
@@ -777,6 +834,63 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             {/* Scrollable body reuses the same unclaimed rows as the panel */}
             <div style={{ overflow: "auto", flex: 1 }}>
               {renderUnclaimedList()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full inventory-alerts modal (stat card / View all). Backdrop click closes. */}
+      {listModal === "inventory" && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Inventory alerts"
+          onClick={() => setListModal(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(44,31,20,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 40,
+            padding: "1rem",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: C.card,
+              borderRadius: "1.375rem",
+              width: "min(92%, 32rem)",
+              maxHeight: "min(80vh, 40rem)",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 1rem 3rem rgba(44,31,20,0.25)",
+              border: `0.125rem solid ${C.border}`,
+              overflow: "hidden",
+            }}
+          >
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "1rem 1.25rem",
+              borderBottom: `0.0625rem solid ${C.border}`,
+            }}>
+              <h3 style={{ ...serif, fontSize: "1.05rem", fontWeight: 700, color: C.brown, margin: 0 }}>
+                Inventory Alerts
+              </h3>
+              <button
+                type="button"
+                onClick={() => setListModal(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.muted }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div style={{ overflow: "auto", flex: 1 }}>
+              {renderInventoryAlertsList()}
             </div>
           </div>
         </div>
