@@ -39,7 +39,7 @@ export async function createPlotNote(
     {
       method: "POST",
       token,
-      body: JSON.stringify(note),
+      body: note,
     }
   );
 }
