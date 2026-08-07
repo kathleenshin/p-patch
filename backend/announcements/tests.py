@@ -1,12 +1,35 @@
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from announcements.models import Announcement
+from announcements.models import RETENTION_DAYS, Announcement
 
 User = get_user_model()
+
+
+class AnnouncementModelTests(TestCase):
+    def test_purge_expired_removes_posts_older_than_retention(self):
+        admin = User.objects.create_user(
+            username="purge-admin",
+            email="purge-admin@example.com",
+            password="pass12345",
+            is_approved=True,
+            is_garden_admin=True,
+        )
+        keep = Announcement.objects.create(body="Still fresh.", author=admin)
+        stale = Announcement.objects.create(body="Too old.", author=admin)
+        Announcement.objects.filter(pk=stale.pk).update(
+            created_at=timezone.now() - timedelta(days=RETENTION_DAYS + 1),
+        )
+
+        removed = Announcement.purge_expired()
+
+        self.assertEqual(removed, 1)
+        self.assertTrue(Announcement.objects.filter(pk=keep.pk).exists())
+        self.assertFalse(Announcement.objects.filter(pk=stale.pk).exists())
 
 
 class AnnouncementApiTests(APITestCase):
@@ -16,6 +39,8 @@ class AnnouncementApiTests(APITestCase):
             username="ann-admin",
             email="ann-admin@example.com",
             password="pass12345",
+            first_name="Ada",
+            last_name="Lovelace",
             is_approved=True,
             is_garden_admin=True,
         )
@@ -53,6 +78,8 @@ class AnnouncementApiTests(APITestCase):
         member_resp = self.client.get("/api/announcements/")
         self.assertEqual(member_resp.status_code, 200)
         self.assertEqual(member_resp.data[0]["body"], "Welcome to the garden.")
+        self.assertEqual(member_resp.data[0]["author_name"], "Ada Lovelace")
+        self.assertEqual(member_resp.data[0]["author_email"], "ann-admin@example.com")
 
     def test_only_garden_admin_can_create(self):
         self.client.force_authenticate(user=self.member)
@@ -68,6 +95,7 @@ class AnnouncementApiTests(APITestCase):
         self.assertEqual(created.status_code, 201)
         self.assertEqual(created.data["body"], "Work party Saturday.")
         self.assertEqual(created.data["author"], self.admin.id)
+        self.assertEqual(created.data["author_name"], "Ada Lovelace")
         self.assertTrue(Announcement.objects.filter(body="Work party Saturday.").exists())
 
     def test_list_deletes_posts_older_than_one_month(self):
@@ -86,3 +114,35 @@ class AnnouncementApiTests(APITestCase):
         self.assertNotIn("Too old.", bodies)
         self.assertTrue(Announcement.objects.filter(pk=keep.pk).exists())
         self.assertFalse(Announcement.objects.filter(pk=stale.pk).exists())
+
+    def test_create_also_purges_expired_posts(self):
+        stale = Announcement.objects.create(body="Expired before post.", author=self.admin)
+        Announcement.objects.filter(pk=stale.pk).update(
+            created_at=timezone.now() - timedelta(days=RETENTION_DAYS + 1),
+        )
+
+        self.client.force_authenticate(user=self.admin)
+        created = self.client.post(
+            "/api/announcements/",
+            {"body": "Brand new post."},
+            format="json",
+        )
+
+        self.assertEqual(created.status_code, 201)
+        self.assertFalse(Announcement.objects.filter(pk=stale.pk).exists())
+        self.assertTrue(Announcement.objects.filter(body="Brand new post.").exists())
+
+    def test_author_name_falls_back_to_email(self):
+        nameless = User.objects.create_user(
+            username="nameless-admin",
+            email="nameless@example.com",
+            password="pass12345",
+            is_approved=True,
+            is_garden_admin=True,
+        )
+        Announcement.objects.create(body="Hello from nameless.", author=nameless)
+
+        self.client.force_authenticate(user=self.member)
+        resp = self.client.get("/api/announcements/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data[0]["author_name"], "nameless@example.com")

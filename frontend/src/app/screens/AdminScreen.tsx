@@ -19,9 +19,16 @@ import { createAnnouncement } from "@/lib/announcementsApi";
 // Live Admin unclaimed-tasks panel + resend-claim action.
 import {
   fetchHelpRequests,
+  isUnclaimedHelpRequest,
   resendHelpRequestClaim,
   type HelpRequest,
 } from "@/lib/helpRequestsApi";
+// Inventory Alerts — list via shared apiFetch (no edits to inventory client).
+import {
+  filterInventoryAlerts,
+  type InventoryAlert,
+  type InventoryItemRow,
+} from "@/lib/adminInventoryAlerts";
 
 type AdminListModal = "pending" | "plots" | "tasks" | "inventory" | null; // which View-all modal is open
 
@@ -190,11 +197,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         token: accessToken,
       });
       // Drop rows that are in stock or have non-numeric quantities.
-      setInventoryAlerts(
-        items
-          .map(toInventoryAlert)
-          .filter((alert): alert is InventoryAlert => alert != null),
-      );
+      setInventoryAlerts(filterInventoryAlerts(items));
     } catch (err) {
       setInventoryAlerts([]);
       setInventoryError(
@@ -357,11 +360,6 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     { label: "Unclaimed Tasks", value: unclaimedTasks.length, color: C.lavender, Icon: ClipboardList, action: () => setListModal("tasks") },
     // Live inventory alert count; opens the inventory View-all modal.
     { label: "Inventory Alerts", value: inventoryAlerts.length, color: C.sky, Icon: Archive, action: () => setListModal("inventory") },
-  ];
-
-  const inventoryAlerts = [
-    { item: "Wheelbarrow",        qty: 0, label: "Out of stock" },
-    { item: "Organic Fertilizer", qty: 2, label: "Low stock"    },
   ];
 
   const unassignedPlots = [

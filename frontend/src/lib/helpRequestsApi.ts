@@ -21,6 +21,11 @@ export interface UserOption {
   last_name?: string;
 }
 
+/** Unclaimed = no assignee and not completed (Admin Unclaimed Tasks panel). */
+export function isUnclaimedHelpRequest(request: HelpRequest): boolean {
+  return request.assigned_to == null && request.status !== "done";
+}
+
 /** List help requests (pass JWT; required once authz is IsApproved). */
 export async function fetchHelpRequests(accessToken: string): Promise<HelpRequest[]> {
   return apiFetch<HelpRequest[]>("/api/help-requests/", { token: accessToken });

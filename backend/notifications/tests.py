@@ -169,3 +169,36 @@ class NotifyNewHelpRequestTests(TestCase):
         self.assertIn("Garden A", message)
         self.assertIn("Fix fence", message)
         self.assertIn("The fence needs repair.", message)
+
+    @override_settings(DEFAULT_FROM_EMAIL="from@example.com")
+    @patch("notifications.services.email.send_mail")
+    def test_notify_returns_address_count_not_message_count(self, mock_send_mail):
+        """Regression: Django send_mail returns 1; callers need recipient count."""
+        mock_send_mail.return_value = 1
+        member_a = User.objects.create_user(
+            email="a@example.com",
+            password="password123",
+            is_approved=True,
+        )
+        member_b = User.objects.create_user(
+            email="b@example.com",
+            password="password123",
+            is_approved=True,
+        )
+        member_c = User.objects.create_user(
+            email="c@example.com",
+            password="password123",
+            is_approved=True,
+        )
+        for user in (member_a, member_b, member_c):
+            GardenMembership.objects.create(
+                garden=self.garden,
+                user=user,
+                status="active",
+            )
+
+        result = notify_new_help_request(self.help_request_without_plot)
+
+        self.assertEqual(result, 3)
+        mock_send_mail.assert_called_once()
+        self.assertEqual(len(mock_send_mail.call_args.kwargs["recipient_list"]), 3)
