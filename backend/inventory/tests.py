@@ -1,6 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from rest_framework import status
 from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
 
 from plots.models import Garden
 
@@ -10,6 +12,10 @@ User = get_user_model()
 
 
 class InventoryItemModelTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {str(RefreshToken.for_user(self.user).access_token)}")
+
     def create_inventory_item(self, **overrides):
         kwargs = {
             "item": "Seeds",
@@ -30,13 +36,13 @@ class InventoryItemModelTests(TestCase):
         cls.user = User.objects.create_user(
             email="testuser@example.com",
             password="password",
+            is_approved=True,
         )
 
     def test_inventory_list_api_returns_items(self):
         self.create_inventory_item()
 
-        client = APIClient()
-        response = client.get("/api/inventory/")
+        response = self.client.get("/api/inventory/")
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data), 1)
@@ -45,8 +51,7 @@ class InventoryItemModelTests(TestCase):
     def test_inventory_create_api_accepts_new_items(self):
         garden = Garden.objects.create(name="North Garden")
 
-        client = APIClient()
-        response = client.post(
+        response = self.client.post(
             "/api/inventory/",
             {
                 "item": "Compost",
@@ -65,8 +70,7 @@ class InventoryItemModelTests(TestCase):
         item = self.create_inventory_item()
         garden = Garden.objects.create(name="East Garden")
 
-        client = APIClient()
-        response = client.put(
+        response = self.client.put(
             f"/api/inventory/{item.id}/",
             {
                 "item": "Seeds",
@@ -85,8 +89,7 @@ class InventoryItemModelTests(TestCase):
     def test_inventory_delete_api_removes_item(self):
         item = self.create_inventory_item(item="Tools", quantity="2", location="Shed")
 
-        client = APIClient()
-        response = client.delete(f"/api/inventory/{item.id}/")
+        response = self.client.delete(f"/api/inventory/{item.id}/")
 
         self.assertEqual(response.status_code, 204)
         self.assertFalse(InventoryItem.objects.filter(id=item.id).exists())
@@ -124,4 +127,58 @@ class InventoryItemModelTests(TestCase):
         )
 
         self.assertEqual(item.garden, garden)
+
+
+class InventoryAuthTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def create_user(self, email="inventory", **extra_fields):
+        return User.objects.create_user(email=f"{email}@example.com", password="password", **extra_fields)
+
+    def authenticate_as(self, user):
+        access_token = str(RefreshToken.for_user(user).access_token)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access_token}")
+
+    def test_inventory_list_requires_approved_user(self):
+        anonymous_response = self.client.get("/api/inventory/")
+        self.assertEqual(anonymous_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        pending_user = self.create_user(email="pending", is_approved=False)
+        self.authenticate_as(pending_user)
+        pending_response = self.client.get("/api/inventory/")
+        self.assertEqual(pending_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        approved_user = self.create_user(email="approved", is_approved=True)
+        self.authenticate_as(approved_user)
+        approved_response = self.client.get("/api/inventory/")
+        self.assertEqual(approved_response.status_code, status.HTTP_200_OK)
+
+    def test_inventory_create_requires_approved_user(self):
+        garden = Garden.objects.create(name="Garden")
+
+        anonymous_response = self.client.post(
+            "/api/inventory/",
+            {"item": "Compost", "quantity": "3 bags", "location": "North Bed", "garden_id": garden.id},
+            format="json",
+        )
+        self.assertEqual(anonymous_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        pending_user = self.create_user(email="pending-create", is_approved=False)
+        self.authenticate_as(pending_user)
+        pending_response = self.client.post(
+            "/api/inventory/",
+            {"item": "Compost", "quantity": "3 bags", "location": "North Bed", "garden_id": garden.id},
+            format="json",
+        )
+        self.assertEqual(pending_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        approved_user = self.create_user(email="approved-create", is_approved=True)
+        self.authenticate_as(approved_user)
+        approved_response = self.client.post(
+            "/api/inventory/",
+            {"item": "Compost", "quantity": "3 bags", "location": "North Bed", "garden_id": garden.id},
+            format="json",
+        )
+        self.assertEqual(approved_response.status_code, status.HTTP_201_CREATED)
 
