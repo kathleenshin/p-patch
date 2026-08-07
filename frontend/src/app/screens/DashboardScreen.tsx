@@ -41,7 +41,6 @@ export function DashboardScreen({
   const { plots, plotsLoading, plotsError } = usePlots();
 
   const plotData: PlotInfo[] = plots
-    .filter((plot) => plot.is_active)
     .map((plot) => {
       const primaryOwner =
         plot.owners.find((owner) => owner.is_primary) ??
