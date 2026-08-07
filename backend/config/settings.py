@@ -11,9 +11,11 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
-from dotenv import load_dotenv
+from datetime import timedelta
 from pathlib import Path
+
 import dj_database_url
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -109,6 +111,21 @@ DATABASES = {
 
 AUTH_USER_MODEL = "users.User"
 
+# Notification delivery
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "console")
+
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+
+NOTIFICATIONS_EMAIL_SENDER = os.getenv("DEFAULT_FROM_EMAIL")
+
+NOTIFICATIONS_AWS_REGION = os.getenv(
+    "AWS_SES_REGION",
+    "us-west-2",
+)
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -179,8 +196,6 @@ REST_FRAMEWORK = {
         "auth_resend_email": "3/hour",
     },
 }
-
-from datetime import timedelta
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
