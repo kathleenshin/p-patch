@@ -11,3 +11,15 @@ export interface PlotNoteRecord {
     | "garden_members";
   created_at: string;
 }
+
+export async function fetchPlotNotes(
+  token: string | null,
+  plotId: number
+): Promise<PlotNoteRecord[]> {
+  return apiFetch<PlotNoteRecord[]>(
+    `/api/plot-notes/?plot=${plotId}`,
+    {
+      token,
+    }
+  );
+}
