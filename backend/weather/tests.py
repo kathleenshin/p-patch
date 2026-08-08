@@ -57,8 +57,12 @@ class WeatherTestFixtures(TestCase):
         return {
             "current": {
                 "temperature_2m": 70.0,
+                "apparent_temperature": 69.0,
+                "relative_humidity_2m": 55,
                 "weather_code": 1,
                 "wind_speed_10m": 5.0,
+                "surface_pressure": 1012.0,
+                "visibility": 12000,
             },
             "daily": {
                 "time": ["2026-08-01", "2026-08-02"],
@@ -67,6 +71,7 @@ class WeatherTestFixtures(TestCase):
                 "temperature_2m_min": [56.0, 55.0],
                 "precipitation_probability_max": [10, 20],
                 "precipitation_sum": [0.0, 0.1],
+                "uv_index_max": [5.4, 4.7],
             },
         }
 
@@ -75,25 +80,35 @@ class WeatherTestFixtures(TestCase):
         return {
             "current": {
                 "temperature_f": 70.0,
+                "feels_like_f": 69.0,
+                "humidity_percent": 55,
                 "weather_code": 1,
+                "weather_description": "Mainly Sunny",
                 "wind_speed_mph": 5.0,
+                "pressure_hpa": 1012.0,
+                "visibility_meters": 12000,
+                "uv_index": 5.4,
             },
             "forecast": [
                 {
                     "date": "2026-08-01",
                     "weather_code": 1,
+                    "weather_description": "Mainly Sunny",
                     "high_temperature_f": 75.0,
                     "low_temperature_f": 56.0,
                     "precipitation_probability_percent": 10,
                     "precipitation_inches": 0.0,
+                    "uv_index_max": 5.4,
                 },
                 {
                     "date": "2026-08-02",
                     "weather_code": 2,
+                    "weather_description": "Partly Cloudy",
                     "high_temperature_f": 74.0,
                     "low_temperature_f": 55.0,
                     "precipitation_probability_percent": 20,
                     "precipitation_inches": 0.1,
+                    "uv_index_max": 4.7,
                 },
             ],
         }
@@ -233,8 +248,12 @@ class OpenMeteoServiceTests(WeatherTestFixtures):
                 "longitude": -122.3321,
                 "current": [
                     "temperature_2m",
+                    "apparent_temperature",
+                    "relative_humidity_2m",
                     "weather_code",
                     "wind_speed_10m",
+                    "surface_pressure",
+                    "visibility",
                 ],
                 "daily": [
                     "weather_code",
@@ -242,6 +261,7 @@ class OpenMeteoServiceTests(WeatherTestFixtures):
                     "temperature_2m_min",
                     "precipitation_probability_max",
                     "precipitation_sum",
+                    "uv_index_max",
                 ],
                 "temperature_unit": "fahrenheit",
                 "wind_speed_unit": "mph",

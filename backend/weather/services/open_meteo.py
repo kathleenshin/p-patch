@@ -4,6 +4,9 @@ Retrieves current conditions and a seven-day forecast from Open-Meteo.
 The provider response is normalized into a frontend-friendly structure.
 """
 
+import json
+from pathlib import Path
+
 import requests
 
 
@@ -14,6 +17,31 @@ class WeatherServiceError(Exception):
 class OpenMeteoService:
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
     TIMEZONE = "America/Los_Angeles"
+    _DESCRIPTIONS_PATH = (
+        Path(__file__).resolve().parent.parent
+        / "data"
+        / "weather_descriptions.json"
+    )
+    _descriptions_cache = None
+
+    @classmethod
+    def _description_map(cls):
+        if cls._descriptions_cache is None:
+            with cls._DESCRIPTIONS_PATH.open("r", encoding="utf-8") as handle:
+                cls._descriptions_cache = json.load(handle)
+
+        return cls._descriptions_cache
+
+    @classmethod
+    def _description_for(cls, weather_code, *, is_day=True):
+        descriptions = cls._description_map()
+        code_map = descriptions.get(str(weather_code))
+
+        if not isinstance(code_map, dict):
+            return "Mixed"
+
+        period = "day" if is_day else "night"
+        return code_map.get(period) or code_map.get("day") or "Mixed"
 
     # TODO: Implement caching to reduce the number of requests to Open-Meteo.
     @classmethod
@@ -74,10 +102,12 @@ class OpenMeteoService:
         forecast = []
 
         for i, date in enumerate(daily["time"]):
+            code = daily["weather_code"][i]
             forecast.append(
                 {
                     "date": date,
-                    "weather_code": daily["weather_code"][i],
+                    "weather_code": code,
+                    "weather_description": cls._description_for(code, is_day=True),
                     "high_temperature_f": daily[
                         "temperature_2m_max"
                     ][i],
@@ -100,6 +130,10 @@ class OpenMeteoService:
                 "feels_like_f": current["apparent_temperature"],
                 "humidity_percent": current["relative_humidity_2m"],
                 "weather_code": current["weather_code"],
+                "weather_description": cls._description_for(
+                    current["weather_code"],
+                    is_day=True,
+                ),
                 "wind_speed_mph": current["wind_speed_10m"],
                 "pressure_hpa": current["surface_pressure"],
                 "visibility_meters": current["visibility"],

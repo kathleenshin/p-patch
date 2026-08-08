@@ -21,24 +21,7 @@ export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boo
             ? "sun"
             : "cloud";
 
-  const description =
-    code === null
-      ? "Weather unavailable"
-      : code === 0
-        ? "Sunny"
-        : code === 1
-          ? "Mainly Sunny"
-          : code === 2
-            ? "Partly Cloudy"
-            : code === 3
-              ? "Cloudy"
-              : code >= 95
-                ? "Thunderstorm"
-                : code >= 51 && code <= 82
-                  ? "Rain"
-                  : code >= 45 && code <= 48
-                    ? "Foggy"
-                    : "Mixed";
+  const description = current?.weather_description ?? "Weather unavailable";
 
   const visibilityMiles =
     current == null

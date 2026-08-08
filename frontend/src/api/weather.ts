@@ -5,6 +5,7 @@ export interface WeatherCurrent {
   feels_like_f: number;
   humidity_percent: number;
   weather_code: number;
+  weather_description: string;
   wind_speed_mph: number;
   pressure_hpa: number;
   visibility_meters: number;
@@ -14,6 +15,7 @@ export interface WeatherCurrent {
 export interface WeatherForecastDay {
   date: string;
   weather_code: number;
+  weather_description: string;
   high_temperature_f: number;
   low_temperature_f: number;
   precipitation_probability_percent: number;
