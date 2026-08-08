@@ -13,7 +13,7 @@ export function PlotDetailPanel({
   plot: PlotInfo;
   colByState: typeof plotColors;
   onClose: () => void;
-  onNavigate: () => void;
+  onNavigate: (plotId: number) => void;
   hideOwnerNames?: boolean;
 }) {
   const col = colByState[plot.state];
@@ -155,7 +155,7 @@ export function PlotDetailPanel({
       )}
 
       <button
-        onClick={onNavigate}
+        onClick={() => onNavigate(plot.id)}
         style={{
           marginTop: "auto",
           padding: "0.5rem 0.625rem",

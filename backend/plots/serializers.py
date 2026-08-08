@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from help_requests.models import HelpRequest
+
 from .models import Plot, PlotNote
 
 
@@ -32,6 +34,14 @@ class PlotSerializer(serializers.ModelSerializer):
             "is_mine",
         ]
 
+    def _get_related_items(self, obj, related_name):
+        """Return prefetched related objects when available."""
+
+        prefetched = getattr(obj, "_prefetched_objects_cache", {})
+        if related_name in prefetched:
+            return prefetched[related_name]
+        return list(getattr(obj, related_name).all())
+
     def get_owners(self, plot):
         """Return active plot stewards for approved users."""
 
@@ -49,6 +59,12 @@ class PlotSerializer(serializers.ModelSerializer):
             .filter(end_date__isnull=True)
             .select_related("user")
         )
+        ownerships = self._get_related_items(plot, "ownerships")
+        active_ownerships = [
+            ownership
+            for ownership in ownerships
+            if ownership.end_date is None
+        ]
 
         return [
             {
@@ -69,6 +85,11 @@ class PlotSerializer(serializers.ModelSerializer):
         return plot.help_requests.exclude(
             status="done",
         ).exists()
+        help_requests = self._get_related_items(plot, "help_requests")
+        return any(
+            help_request.status != HelpRequest.Status.DONE
+            for help_request in help_requests
+        )
 
     def get_is_mine(self, plot):
         """Return whether the current user actively stewards this plot."""
@@ -82,6 +103,12 @@ class PlotSerializer(serializers.ModelSerializer):
             user=request.user,
             end_date__isnull=True,
         ).exists()
+        user_id = request.user.id
+        ownerships = self._get_related_items(plot, "ownerships")
+        return any(
+            ownership.user_id == user_id and ownership.end_date is None
+            for ownership in ownerships
+        )
 
 
 class PlotNoteSerializer(serializers.ModelSerializer):

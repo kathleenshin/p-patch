@@ -26,12 +26,14 @@ function canOpenScreen(
 export default function App() {
     const { isAuthenticated, isLoading, isApproved, isGardenAdmin } = useAuth();
     const [screen, setScreen] = useState<Screen>("login");
+    const [selectedPlotId, setSelectedPlotId] = useState<number | null>(null);
 
     // Keep route in sync: logged out → login; logged in → allowed screen only.
     useEffect(() => {
         if (isLoading) return;
         if (!isAuthenticated) {
             setScreen("login");
+            setSelectedPlotId(null);
             return;
         }
         if (screen === "login") {
@@ -65,11 +67,17 @@ export default function App() {
                 )}
                 {/* Everyone authenticated can see Dashboard (incl. pending). */}
                 {showApp && screen === "dashboard" && (
-                    <DashboardScreen setScreen={setScreen} />
+                    <DashboardScreen
+                        setScreen={setScreen}
+                        setSelectedPlotId={setSelectedPlotId}
+                    />
                 )}
                 {/* Member screens require approval. */}
                 {showApp && isApproved && screen === "plot" && (
-                    <PlotScreen setScreen={setScreen} />
+                    <PlotScreen
+                        setScreen={setScreen}
+                        selectedPlotId={selectedPlotId}
+                    />
                 )}
                 {showApp && isApproved && screen === "tasks" && <TaskScreen />}
                 {showApp && isApproved && screen === "inventory" && <InventoryScreen />}

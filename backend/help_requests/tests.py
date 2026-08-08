@@ -23,6 +23,7 @@ class HelpRequestAPITests(APITestCase):
             username="apiuser",
             email="apiuser@example.com",
             password="password",
+            is_approved=True,
         )
 
         cls.garden = Garden.objects.create(name="Green Street Garden")
@@ -32,6 +33,48 @@ class HelpRequestAPITests(APITestCase):
         self.client.credentials(
             HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(self.user).access_token}"
         )
+
+    def test_assignee_list_returns_approved_users_only(self):
+        approved_member = User.objects.create_user(
+            email="member@example.com",
+            password="password",
+            first_name="Mina",
+            last_name="Member",
+            is_approved=True,
+        )
+        User.objects.create_user(
+            email="pending@example.com",
+            password="password",
+            first_name="Pat",
+            last_name="Pending",
+            is_approved=False,
+        )
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(approved_member).access_token}"
+        )
+
+        response = self.client.get(reverse("help-request-assignees"))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            [row["email"] for row in response.data],
+            ["apiuser@example.com", "member@example.com"],
+        )
+
+    def test_assignee_list_rejects_pending_users(self):
+        pending = User.objects.create_user(
+            email="pending-only@example.com",
+            password="password",
+            is_approved=False,
+        )
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(pending).access_token}"
+        )
+
+        response = self.client.get(reverse("help-request-assignees"))
+
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_list_help_requests(self):
         HelpRequest.objects.create(

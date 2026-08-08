@@ -18,8 +18,10 @@ import plotPhoto from "../../imports/PlotHeroImage.jpg";
 
 export function PlotScreen({
   setScreen,
+  selectedPlotId,
 }: {
   setScreen: (s: Screen) => void;
+  selectedPlotId?: number | null;
 }) {
   type NoteVisibility =
     | "this_plot"
@@ -29,6 +31,7 @@ export function PlotScreen({
   const [activeTab, setActiveTab] = useState<
     "overview" | "notes" | "gallery" | "history"
   >("overview");
+
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [newNoteContent, setNewNoteContent] = useState("");
   const [newNoteVisibility, setNewNoteVisibility] =
@@ -44,19 +47,29 @@ export function PlotScreen({
     (plot) => plot.is_mine && plot.is_active
   );
 
+  const selectedPlot =
+    selectedPlotId == null
+      ? null
+      : plots.find((plot) => plot.id === selectedPlotId) ?? null;
+
+  const focusPlot = selectedPlot ?? myPlot;
   const {
     notes,
     notesLoading,
     notesError,
     createNote,
-  } = usePlotNotes(myPlot?.id);
+  } = usePlotNotes(focusPlot?.id);
 
   const primaryOwner =
-    myPlot?.owners.find((owner) => owner.is_primary) ??
-    myPlot?.owners[0];
+    focusPlot?.owners.find((owner) => owner.is_primary) ??
+    focusPlot?.owners[0];
 
   const secondaryOwners =
-    myPlot?.owners
+    focusPlot?.owners
+      .filter((owner) => !owner.is_primary)
+
+  const secondaryOwners =
+    focusPlot?.owners
       .filter((owner) => !owner.is_primary)
       .map((owner, index) => {
         const initials = owner.name
@@ -82,11 +95,11 @@ export function PlotScreen({
     { key: "history", label: "History" },
   ];
 
-  const plotInfo = myPlot
+  const plotInfo = focusPlot
     ? [
         {
           label: "Status",
-          value: myPlot.is_active ? "Active" : "Inactive",
+          value: focusPlot.is_active ? "Active" : "Inactive",
         },
         {
           label: "Owner",
@@ -94,11 +107,11 @@ export function PlotScreen({
         },
         {
           label: "Garden",
-          value: myPlot.garden_name,
+          value: focusPlot.garden_name,
         },
         {
           label: "Plot",
-          value: `#${myPlot.plot_number}`,
+          value: `#${focusPlot.plot_number}`,
         },
       ]
     : [];
@@ -191,7 +204,7 @@ export function PlotScreen({
     );
   }
 
-  if (!myPlot) {
+  if (!focusPlot) {
     return (
       <div
         style={{
@@ -202,7 +215,7 @@ export function PlotScreen({
           ...sans,
         }}
       >
-        No active plot is assigned to your account.
+        No plot is available to display.
       </div>
     );
   }
@@ -242,7 +255,7 @@ export function PlotScreen({
 
           <ChevronRight size={11} color={C.muted} />
 
-          <span>{myPlot.garden_name}</span>
+          <span>{focusPlot.garden_name}</span>
 
           <ChevronRight size={11} color={C.muted} />
 
@@ -252,7 +265,7 @@ export function PlotScreen({
               fontWeight: 700,
             }}
           >
-            Plot #{myPlot.plot_number}
+            Plot #{focusPlot.plot_number}
           </span>
         </div>
 
@@ -305,7 +318,7 @@ export function PlotScreen({
                       lineHeight: 1.1,
                     }}
                   >
-                    Plot #{myPlot.plot_number}
+                    Plot #{focusPlot.plot_number}
                   </div>
 
                   <div

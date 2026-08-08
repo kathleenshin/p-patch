@@ -32,14 +32,15 @@ const topTask = {
 
 export function DashboardScreen({
   setScreen,
+  setSelectedPlotId,
 }: {
   setScreen: (s: Screen) => void;
+  setSelectedPlotId: (plotId: number) => void;
 }) {
   const { isApproved } = useAuth();
   const { plots, plotsLoading, plotsError } = usePlots();
 
   const plotData: PlotInfo[] = plots
-    .filter((plot) => plot.is_active)
     .map((plot) => {
       const primaryOwner =
         plot.owners.find((owner) => owner.is_primary) ??
@@ -48,6 +49,7 @@ export function DashboardScreen({
       return {
         id: plot.id,
         plotNumber: plot.plot_number,
+        needsHelp: plot.has_open_help_request,
         owner: primaryOwner?.name,
         since: primaryOwner?.start_date ?? undefined,
         state: plot.is_mine
@@ -118,7 +120,10 @@ export function DashboardScreen({
             ) : (
               <PlotGrid
                 plots={plotData}
-                onNavigate={() => setScreen("plot")}
+                onNavigate={(plotId) => {
+                  setSelectedPlotId(plotId);
+                  setScreen("plot");
+                }}
                 hideOwnerNames={!isApproved}
               />
             )}

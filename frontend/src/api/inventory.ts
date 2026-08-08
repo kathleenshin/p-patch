@@ -1,4 +1,10 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+import { apiFetch } from "../lib/api";
+import { getAccessToken } from "../lib/authStorage";
+const API_BASE_URL = (
+  import.meta.env.VITE_API_URL ||
+  import.meta.env.VITE_API_BASE_URL ||
+  "http://127.0.0.1:8000"
+).replace(/\/$/, "");
 
 function inventoryUrl(path = "") {
   return `${API_BASE_URL}/api/inventory/${path}`.replace(/\/+$|([^:])\/\/+/g, "$1/");
@@ -16,11 +22,7 @@ export type InventoryItem = {
 };
 
 export async function fetchInventoryItems(): Promise<InventoryItem[]> {
-  const response = await fetch(inventoryUrl());
-  if (!response.ok) {
-    throw new Error("Unable to load inventory items");
-  }
-  return response.json();
+  return apiFetch<InventoryItem[]>("/api/inventory/", { token: getAccessToken() });
 }
 
 const DEFAULT_GARDEN_ID = Number(import.meta.env.VITE_DEFAULT_GARDEN_ID || 1);
@@ -31,20 +33,11 @@ export async function createInventoryItem(payload: {
   location: string;
   garden_id?: number;
 }): Promise<InventoryItem> {
-  const response = await fetch(inventoryUrl(), {
+  return apiFetch<InventoryItem>("/api/inventory/", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ...payload, garden_id: payload.garden_id ?? DEFAULT_GARDEN_ID }),
+    token: getAccessToken(),
+    body: { ...payload, garden_id: payload.garden_id ?? DEFAULT_GARDEN_ID },
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || "Unable to create inventory item");
-  }
-
-  return response.json();
 }
 
 export async function updateInventoryItem(
@@ -56,28 +49,16 @@ export async function updateInventoryItem(
     garden_id?: number;
   }
 ): Promise<InventoryItem> {
-  const response = await fetch(inventoryUrl(`${id}/`), {
+  return apiFetch<InventoryItem>(`/api/inventory/${id}/`, {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ ...payload, garden_id: payload.garden_id ?? DEFAULT_GARDEN_ID }),
+    token: getAccessToken(),
+    body: { ...payload, garden_id: payload.garden_id ?? DEFAULT_GARDEN_ID },
   });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || "Unable to update inventory item");
-  }
-
-  return response.json();
 }
 
 export async function deleteInventoryItem(id: number): Promise<void> {
-  const response = await fetch(inventoryUrl(`${id}/`), {
+  await apiFetch<void>(`/api/inventory/${id}/`, {
     method: "DELETE",
+    token: getAccessToken(),
   });
-
-  if (!response.ok) {
-    throw new Error("Unable to delete inventory item");
-  }
 }

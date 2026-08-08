@@ -8,11 +8,14 @@ import {
   type ReactNode,
 } from "react";
 import {
+  confirmEmail as apiConfirmEmail,
   fetchMe,
   login as apiLogin,
   logout as apiLogout,
   register as apiRegister,
+  resendConfirmation as apiResendConfirmation,
   type AuthUser,
+  type RegisterResponse,
 } from "@/lib/authApi";
 import { clearTokens, getAccessToken } from "@/lib/authStorage";
 import { ApiError } from "@/lib/api";
@@ -28,7 +31,14 @@ type AuthContextValue = {
   /** From /me — controls Admin nav/screen. */
   isGardenAdmin: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, fullName?: string) => Promise<void>;
+  /** Creates account + sends email; does not log the user in. */
+  register: (
+    email: string,
+    password: string,
+    fullName?: string,
+  ) => Promise<RegisterResponse>;
+  confirmEmail: (uid: string, token: string) => Promise<void>;
+  resendConfirmation: (email: string) => Promise<string>;
   logout: () => void;
 };
 
@@ -86,15 +96,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user);
   }, []);
 
-  // Register: same as login after account creation.
+  // Register: account is inactive until email confirmation — no session yet.
   const register = useCallback(
     async (email: string, password: string, fullName = "") => {
-      const data = await apiRegister(email, password, fullName);
-      setAccessToken(data.access);
-      setUser(data.user);
+      return apiRegister(email, password, fullName);
     },
     [],
   );
+
+  const confirmEmail = useCallback(async (uid: string, token: string) => {
+    const data = await apiConfirmEmail(uid, token);
+    setAccessToken(data.access);
+    setUser(data.user);
+  }, []);
+
+  const resendConfirmation = useCallback(async (email: string) => {
+    const data = await apiResendConfirmation(email);
+    return data.detail;
+  }, []);
 
   // Logout: drop tokens and clear in-memory auth state.
   const logout = useCallback(() => {
@@ -115,9 +134,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       isGardenAdmin: Boolean(user?.is_garden_admin),
       login,
       register,
+      confirmEmail,
+      resendConfirmation,
       logout,
     }),
-    [user, accessToken, isLoading, login, register, logout],
+    [
+      user,
+      accessToken,
+      isLoading,
+      login,
+      register,
+      confirmEmail,
+      resendConfirmation,
+      logout,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

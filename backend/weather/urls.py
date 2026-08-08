@@ -4,5 +4,5 @@ from . import views
 
 
 urlpatterns = [
-    path("", views.weather_forecast, name="weather-forecast"),
+    path("", views.WeatherForecastView.as_view(), name="weather-forecast"),
 ]

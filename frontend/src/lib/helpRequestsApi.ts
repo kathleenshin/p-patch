@@ -51,7 +51,10 @@ export async function deleteHelpRequest(id: number): Promise<void> {
   });
 }
 
-export async function fetchUsers(): Promise<UserOption[]> {
-  const data = await apiFetch<unknown>('/api/auth/users/');
+export async function fetchUsers(accessToken: string): Promise<UserOption[]> {
+  const data = await apiFetch<unknown>('/api/help-requests/assignees/', {
+    method: 'GET',
+    token: accessToken,
+  });
   return Array.isArray(data) ? (data as UserOption[]) : [];
 }
