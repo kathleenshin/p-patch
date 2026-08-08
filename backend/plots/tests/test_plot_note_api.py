@@ -260,7 +260,7 @@ class PlotNoteAPITests(BasePlotAPITestCase):
         self.assertEqual(response.json(), [])
 
     def test_all_plots_visibility_allows_any_active_steward_in_garden(self):
-        steward_plot = self.create_plot(plot_number="2")
+        steward_plot = self.create_plot(plot_number="22")
         shared_note = self.create_plot_note(
             plot=steward_plot,
             author=self.user_two,

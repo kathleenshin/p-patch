@@ -54,11 +54,6 @@ class PlotSerializer(serializers.ModelSerializer):
         if not request.user.is_approved:
             return []
 
-        active_ownerships = (
-            plot.ownerships
-            .filter(end_date__isnull=True)
-            .select_related("user")
-        )
         ownerships = self._get_related_items(plot, "ownerships")
         active_ownerships = [
             ownership
@@ -82,9 +77,6 @@ class PlotSerializer(serializers.ModelSerializer):
     def get_has_open_help_request(self, plot):
         """Return whether the plot has an unfinished help request."""
 
-        return plot.help_requests.exclude(
-            status="done",
-        ).exists()
         help_requests = self._get_related_items(plot, "help_requests")
         return any(
             help_request.status != HelpRequest.Status.DONE
@@ -99,10 +91,6 @@ class PlotSerializer(serializers.ModelSerializer):
         if not request or not request.user.is_authenticated:
             return False
 
-        return plot.ownerships.filter(
-            user=request.user,
-            end_date__isnull=True,
-        ).exists()
         user_id = request.user.id
         ownerships = self._get_related_items(plot, "ownerships")
         return any(
