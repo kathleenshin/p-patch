@@ -3,23 +3,14 @@ import { Sun, Droplets, Wind, Gauge, Thermometer, Eye, ArrowRight } from "lucide
 import { C, mono } from "../../theme";
 import { useWeather } from "../../hooks/useWeather";
 import { WeatherIcon } from "./WeatherIcon";
+import { weatherCodeToIconType } from "./weatherCode";
 
 export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boolean }) {
   const { weather, weatherLoading, weatherError } = useWeather();
 
   const current = weather?.current;
 
-  const code = current?.weather_code ?? null;
-  const iconType =
-    code === null
-      ? "cloud"
-      : code >= 95
-        ? "storm"
-        : (code >= 51 && code <= 67) || (code >= 80 && code <= 82)
-          ? "rain"
-          : code <= 1
-            ? "sun"
-            : "cloud";
+  const iconType = weatherCodeToIconType(current?.weather_code);
 
   const description = current?.weather_description ?? "Weather unavailable";
 
