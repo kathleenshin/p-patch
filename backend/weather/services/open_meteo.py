@@ -16,7 +16,6 @@ class OpenMeteoService:
     TIMEZONE = "America/Los_Angeles"
 
     # TODO: Implement caching to reduce the number of requests to Open-Meteo.
-    # TODO: Confirm which forecast fields the frontend and recommendation logic need.
     @classmethod
     def get_forecast(cls, latitude, longitude):
         try:
@@ -27,8 +26,12 @@ class OpenMeteoService:
                     "longitude": longitude,
                     "current": [
                         "temperature_2m",
+                        "apparent_temperature",
+                        "relative_humidity_2m",
                         "weather_code",
                         "wind_speed_10m",
+                        "surface_pressure",
+                        "visibility",
                     ],
                     "daily": [
                         "weather_code",
@@ -36,6 +39,7 @@ class OpenMeteoService:
                         "temperature_2m_min",
                         "precipitation_probability_max",
                         "precipitation_sum",
+                        "uv_index_max",
                     ],
                     "temperature_unit": "fahrenheit",
                     "wind_speed_unit": "mph",
@@ -62,32 +66,44 @@ class OpenMeteoService:
 
     @classmethod
     def _normalize(cls, payload):
-        # Convert Open-Meteo's response into a frontend-friendly format.
+        """Convert Open-Meteo's response into a frontend-friendly format."""
+
         current = payload["current"]
         daily = payload["daily"]
 
         forecast = []
 
-        # Reshape Open-Meteo's daily forecast into one object per day.
         for i, date in enumerate(daily["time"]):
             forecast.append(
                 {
                     "date": date,
                     "weather_code": daily["weather_code"][i],
-                    "high_temperature_f": daily["temperature_2m_max"][i],
-                    "low_temperature_f": daily["temperature_2m_min"][i],
+                    "high_temperature_f": daily[
+                        "temperature_2m_max"
+                    ][i],
+                    "low_temperature_f": daily[
+                        "temperature_2m_min"
+                    ][i],
                     "precipitation_probability_percent": daily[
                         "precipitation_probability_max"
                     ][i],
-                    "precipitation_inches": daily["precipitation_sum"][i],
+                    "precipitation_inches": daily[
+                        "precipitation_sum"
+                    ][i],
+                    "uv_index_max": daily["uv_index_max"][i],
                 }
             )
 
         return {
             "current": {
                 "temperature_f": current["temperature_2m"],
+                "feels_like_f": current["apparent_temperature"],
+                "humidity_percent": current["relative_humidity_2m"],
                 "weather_code": current["weather_code"],
                 "wind_speed_mph": current["wind_speed_10m"],
+                "pressure_hpa": current["surface_pressure"],
+                "visibility_meters": current["visibility"],
+                "uv_index": daily["uv_index_max"][0],
             },
             "forecast": forecast,
         }

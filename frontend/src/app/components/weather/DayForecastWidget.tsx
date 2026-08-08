@@ -1,19 +1,76 @@
 import { type ElementType } from "react";
 import { Sun, Droplets, Wind, Gauge, Thermometer, Eye, ArrowRight } from "lucide-react";
 import { C, mono } from "../../theme";
-import { weekWeather, todayDetail } from "./weatherData";
+import { useWeather } from "../../hooks/useWeather";
 import { WeatherIcon } from "./WeatherIcon";
 
 export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boolean }) {
-  const today = weekWeather[0];
-  const d     = todayDetail;
+  const { weather, weatherLoading, weatherError } = useWeather();
+
+  const current = weather?.current;
+
+  const code = current?.weather_code ?? null;
+  const iconType =
+    code === null
+      ? "cloud"
+      : code >= 95
+        ? "storm"
+        : (code >= 51 && code <= 67) || (code >= 80 && code <= 82)
+          ? "rain"
+          : code <= 1
+            ? "sun"
+            : "cloud";
+
+  const description =
+    code === null
+      ? "Weather unavailable"
+      : code === 0
+        ? "Sunny"
+        : code === 1
+          ? "Mainly Sunny"
+          : code === 2
+            ? "Partly Cloudy"
+            : code === 3
+              ? "Cloudy"
+              : code >= 95
+                ? "Thunderstorm"
+                : code >= 51 && code <= 82
+                  ? "Rain"
+                  : code >= 45 && code <= 48
+                    ? "Foggy"
+                    : "Mixed";
+
+  const visibilityMiles =
+    current == null
+      ? null
+      : Math.round((current.visibility_meters * 0.000621371) * 10) / 10;
 
   const stats: { Icon: ElementType; val: string; label: string }[] = [
-    { Icon: Droplets,    val: `${d.humidity}%`,    label: "Humidity" },
-    { Icon: Wind,        val: `${d.wind} mph`,      label: "Wind" },
-    { Icon: Gauge,       val: `${d.pressure} mb`,   label: "Pressure" },
-    { Icon: Thermometer, val: `UV ${d.uvIndex}`,    label: "UV Index" },
-    { Icon: Eye,         val: `${d.visibility} mi`, label: "Visibility" },
+    {
+      Icon: Droplets,
+      val: current ? `${Math.round(current.humidity_percent)}%` : "--",
+      label: "Humidity",
+    },
+    {
+      Icon: Wind,
+      val: current ? `${Math.round(current.wind_speed_mph)} mph` : "--",
+      label: "Wind",
+    },
+    {
+      Icon: Gauge,
+      val: current ? `${Math.round(current.pressure_hpa)} mb` : "--",
+      label: "Pressure",
+    },
+    {
+      Icon: Thermometer,
+      val: current ? `UV ${Math.round(current.uv_index)}` : "--",
+      label: "UV Index",
+    },
+    {
+      Icon: Eye,
+      val: visibilityMiles == null ? "--" : `${visibilityMiles} mi`,
+      label: "Visibility",
+    },
   ];
 
   return (
@@ -39,14 +96,22 @@ export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boo
           gap: "0.75rem", marginBottom: "0.25rem" }}>
           <div>
             <span style={{ fontSize: "2rem", fontWeight: 800,
-              color: C.brown, lineHeight: 1 }}>{today.hi}°</span>
+              color: C.brown, lineHeight: 1 }}>
+              {current ? `${Math.round(current.temperature_f)}°` : "--°"}
+            </span>
             <span style={{ fontSize: "0.65rem", color: C.brownLight,
-              display: "block", marginTop: "0.125rem" }}>{today.desc}</span>
+              display: "block", marginTop: "0.125rem" }}>
+              {weatherLoading ? "Loading weather..." : description}
+            </span>
           </div>
-          <WeatherIcon type={today.icon} size={54} />
+          <WeatherIcon type={iconType} size={54} />
         </div>
         <div style={{ fontSize: "0.65rem", color: C.muted, marginBottom: "0.75rem" }}>
-          Feels like {d.feelsLike}°F
+          {weatherError
+            ? weatherError
+            : current
+              ? `Feels like ${Math.round(current.feels_like_f)}°F`
+              : "Weather unavailable"}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
           {stats.map(({ Icon, val, label }) => (
