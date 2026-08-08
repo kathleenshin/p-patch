@@ -14,6 +14,7 @@ import { C, serif, sans, mono, linkStyle } from "../theme";
 import type { Screen } from "../types";
 import { DayForecastWidget } from "../components/weather/DayForecastWidget";
 import { usePlots } from "../hooks/usePlots";
+import { usePlotNotes } from "../hooks/usePlotNotes";
 import plotBedIcon from "../../imports/PlotPageIcon.jpg";
 import plotPhoto from "../../imports/PlotHeroImage.jpg";
 
