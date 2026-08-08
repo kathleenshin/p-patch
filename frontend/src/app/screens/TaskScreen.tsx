@@ -1,6 +1,7 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Plus, Filter, X } from "lucide-react";
 import { C, serif, sans, mono, inputStyle } from "../theme";
+import { useAuth } from "../auth/AuthContext";
 import taskIcon from "../../imports/TaskPageIcon.jpg";
 import {
   createHelpRequest,
@@ -36,6 +37,7 @@ const initialColumns: Column[] = [
 ];
 
 export function TaskScreen() {
+  const { accessToken } = useAuth();
   const [columns] = useState(initialColumns);
   const [showNew, setShowNew] = useState(false);
   const [title, setTitle] = useState("");
@@ -82,8 +84,13 @@ export function TaskScreen() {
   };
 
   const loadUsers = async () => {
+    if (!accessToken) {
+      setUsers([]);
+      return;
+    }
+
     try {
-      const data = await fetchUsers();
+      const data = await fetchUsers(accessToken);
       setUsers(data);
     } catch {
       setUsers([]);
@@ -107,7 +114,7 @@ export function TaskScreen() {
   useEffect(() => {
     void loadRequests();
     void loadUsers();
-  }, []);
+  }, [accessToken]);
 
   const handleCreateRequest = async () => {
     setIsSubmitting(true);

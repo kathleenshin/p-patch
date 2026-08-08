@@ -222,10 +222,8 @@
 }
 
 .dashboard-feed-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  align-items: stretch;
+  display: block;
+  width: 100%;
 }
 
 .plot-detail-layout {
@@ -346,10 +344,6 @@
     border-left: none;
     border-top: 0.0625rem solid var(--border);
     padding: 1rem 0;
-  }
-
-  .dashboard-feed-row {
-    grid-template-columns: 1fr;
   }
 
   .plot-detail-layout {

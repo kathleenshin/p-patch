@@ -11,9 +11,12 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+from datetime import timedelta
 from dotenv import load_dotenv
 from pathlib import Path
+
 import dj_database_url
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -25,16 +28,26 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY", "unsafe-local-development-key")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DEBUG", "False") == "True"
+DEBUG = os.getenv("DEBUG", "False").lower() == "true"
 
 ALLOWED_HOSTS = [
     h.strip()
     for h in os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
     if h.strip()
 ]
+
+
+def _csv_env(name: str, default: str = "") -> list[str]:
+    """Parse comma-separated env values into a clean list."""
+    return [value.strip() for value in os.getenv(name, default).split(",") if value.strip()]
+
+
+def _normalize_origin(origin: str) -> str:
+    """CORS/CSRF origins must not include a trailing slash."""
+    return origin.strip().rstrip("/")
 
 # Application definition
 
@@ -62,14 +75,15 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -108,6 +122,21 @@ DATABASES = {
 
 AUTH_USER_MODEL = "users.User"
 
+# Notification delivery
+EMAIL_PROVIDER = os.getenv("EMAIL_PROVIDER", "console")
+
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+
+NOTIFICATIONS_EMAIL_SENDER = os.getenv("DEFAULT_FROM_EMAIL")
+
+NOTIFICATIONS_AWS_REGION = os.getenv(
+    "AWS_SES_REGION",
+    "us-west-2",
+)
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -144,13 +173,36 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 
+STATIC_ROOT = BASE_DIR / "staticfiles"
+
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# Local Vite dev servers (5173, 5174, 5175, etc.)
+CORS_ALLOWED_ORIGIN_REGEXES = _csv_env(
+    "CORS_ALLOWED_ORIGIN_REGEXES",
+    r"^http://localhost:517\d$,^http://127\.0\.0\.1:517\d$",
+)
+
+# Explicit origins (production, staging, etc.)
 CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.getenv(
-        "CORS_ALLOWED_ORIGINS",
-        "http://localhost:5173,http://127.0.0.1:5173",
-    ).split(",")
-    if origin.strip()
+    _normalize_origin(origin)
+    for origin in _csv_env("CORS_ALLOWED_ORIGINS")
+]
+
+# Keep CSRF trusted origins aligned with explicit CORS origins unless overridden.
+CSRF_TRUSTED_ORIGINS = [
+    _normalize_origin(origin)
+    for origin in _csv_env(
+        "CSRF_TRUSTED_ORIGINS",
+        ",".join(CORS_ALLOWED_ORIGINS),
+    )
 ]
 
 REST_FRAMEWORK = {
@@ -160,12 +212,37 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    # Auth email endpoints set throttle_classes explicitly; rates live here.
+    "DEFAULT_THROTTLE_RATES": {
+        "auth_register": "10/hour",
+        "auth_resend_ip": "10/hour",
+        "auth_resend_email": "3/hour",
+    },
 }
-
-from datetime import timedelta
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+# --- Email (console locally; AWS SES SMTP in production) ---
+# Dev default prints messages to the runserver console.
+# For SES: set EMAIL_BACKEND to django.core.mail.backends.smtp.EmailBackend
+# and EMAIL_HOST to email-smtp.<region>.amazonaws.com with SES SMTP credentials.
+EMAIL_BACKEND = os.getenv(
+    "EMAIL_BACKEND",
+    "django.core.mail.backends.console.EmailBackend",
+)
+EMAIL_HOST = os.getenv("EMAIL_HOST", "")
+EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL",
+    "Judkins Park P-Patch <noreply@example.com>",
+)
+# Used in confirmation links emailed to new registrants.
+# Prefer "localhost" over 127.0.0.1 — Vite often binds IPv6 localhost only.
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").strip().rstrip("/")

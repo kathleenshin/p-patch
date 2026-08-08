@@ -1,4 +1,9 @@
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+
+from help_requests.models import HelpRequest
 from plots.models import Plot
+from plots.models import PlotOwnership
 
 from .test_fixtures import BasePlotAPITestCase
 
@@ -104,3 +109,97 @@ class PlotAPITests(BasePlotAPITestCase):
         )
 
         self.assertEqual(response.status_code, 404)
+
+    def test_plot_detail_includes_owners_and_help_request_flags(self):
+        self.user_one.is_approved = True
+        self.user_one.save(update_fields=["is_approved"])
+
+        PlotOwnership.objects.create(
+            user=self.user_one,
+            plot=self.plot,
+            is_primary=True,
+            start_date=self.d1,
+        )
+
+        HelpRequest.objects.create(
+            title="Need watering help",
+            description="Out of town for a week.",
+            status=HelpRequest.Status.ACTIVE,
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user_one,
+        )
+
+        response = self.client.get(self.plot_detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertTrue(payload["has_open_help_request"])
+        self.assertTrue(payload["is_mine"])
+        self.assertEqual(len(payload["owners"]), 1)
+        self.assertEqual(
+            payload["owners"][0]["id"],
+            self.user_one.id,
+        )
+        self.assertTrue(payload["owners"][0]["is_primary"])
+
+    def test_plot_list_query_count_does_not_scale_linearly_with_plot_count(self):
+        self.user_one.is_approved = True
+        self.user_one.save(update_fields=["is_approved"])
+
+        PlotOwnership.objects.create(
+            user=self.user_one,
+            plot=self.plot,
+            is_primary=True,
+            start_date=self.d1,
+        )
+        HelpRequest.objects.create(
+            title="Initial request",
+            description="Baseline row",
+            status=HelpRequest.Status.ACTIVE,
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user_one,
+        )
+
+        with CaptureQueriesContext(connection) as baseline_ctx:
+            baseline_response = self.client.get(
+                self.plot_list_create_url
+            )
+
+        self.assertEqual(baseline_response.status_code, 200)
+        baseline_count = len(baseline_ctx)
+
+        for idx in range(2, 19):
+            plot = Plot.objects.create(
+                garden=self.garden,
+                plot_number=str(idx),
+            )
+            PlotOwnership.objects.create(
+                user=self.user_one,
+                plot=plot,
+                is_primary=True,
+                start_date=self.d1,
+            )
+            HelpRequest.objects.create(
+                title=f"Request {idx}",
+                description="Coverage row",
+                status=HelpRequest.Status.ACTIVE,
+                garden=self.garden,
+                plot=plot,
+                created_by=self.user_one,
+            )
+
+        with CaptureQueriesContext(connection) as expanded_ctx:
+            expanded_response = self.client.get(
+                self.plot_list_create_url
+            )
+
+        self.assertEqual(expanded_response.status_code, 200)
+
+        # Query count should stay effectively constant as list size grows.
+        self.assertLessEqual(
+            len(expanded_ctx),
+            baseline_count + 3,
+        )

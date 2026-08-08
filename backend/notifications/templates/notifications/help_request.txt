@@ -1,0 +1,4 @@
+A new help request has been posted for {{ location }}.
+
+Task: {{ help_request.title }}
+Description: {{ help_request.description }}

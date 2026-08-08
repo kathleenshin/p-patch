@@ -1,5 +1,8 @@
-from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
+from rest_framework import status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from plots.models import Garden
 
@@ -8,45 +11,44 @@ from .services.open_meteo import OpenMeteoService, WeatherServiceError
 
 # Weather forecasts are retrieved for the garden's location rather than
 # the retrieving user's location.
-def weather_forecast(request):
-    garden_id = request.GET.get("garden_id")
+class WeatherForecastView(APIView):
+    permission_classes = [IsAuthenticated]
 
-    if not garden_id:
-        return JsonResponse(
-            {"detail": "Query parameter garden_id is required."},
-            status=400,
-        )
+    def get(self, request):
+        garden_id = request.query_params.get("garden_id")
 
-    try:
-        garden_id = int(garden_id)
-    except (ValueError, TypeError):
-        return JsonResponse(
-            {"detail": "garden_id must be an integer."},
-            status=400,
-        )
+        if not garden_id:
+            return Response(
+                {"detail": "Query parameter garden_id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-    garden = get_object_or_404(Garden, pk=garden_id)
+        try:
+            garden_id = int(garden_id)
+        except (ValueError, TypeError):
+            return Response(
+                {"detail": "garden_id must be an integer."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-<<<<<<< HEAD
-    # Forecasts cannot be retrieved until a garden has been geocoded.
-=======
->>>>>>> main
-    if garden.latitude is None or garden.longitude is None:
-        return JsonResponse(
-            {"detail": "Garden does not have coordinates."},
-            status=400,
-        )
+        garden = get_object_or_404(Garden, pk=garden_id)
 
-    try:
-        data = OpenMeteoService.get_forecast(
-            latitude=float(garden.latitude),
-            longitude=float(garden.longitude),
-        )
-    # Translate weather service failures into an HTTP 502 response "Bad Gateway"
-    except WeatherServiceError as exc:
-        return JsonResponse(
-            {"detail": str(exc)},
-            status=502,
-        )
+        if garden.latitude is None or garden.longitude is None:
+            return Response(
+                {"detail": "Garden does not have coordinates."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-    return JsonResponse(data)
+        try:
+            data = OpenMeteoService.get_forecast(
+                latitude=float(garden.latitude),
+                longitude=float(garden.longitude),
+            )
+        # Translate weather service failures into an HTTP 502 response "Bad Gateway"
+        except WeatherServiceError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        return Response(data)
