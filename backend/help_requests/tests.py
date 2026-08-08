@@ -1,4 +1,5 @@
 import datetime
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -8,7 +9,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from plots.models import Garden, Plot
+from plots.models import Garden, GardenMembership, Plot
 
 from .models import HelpRequest
 
@@ -110,6 +111,30 @@ class HelpRequestAPITests(APITestCase):
         self.assertEqual(response.data["title"], "Repair shed")
         self.assertEqual(response.data["created_by"], self.user.id)
 
+    @patch("help_requests.views.notify_new_help_request")
+    def test_create_notifies_garden_members(self, mock_notify):
+        """Phase 1: posting a help request emails active garden members."""
+        mock_notify.return_value = 2
+
+        response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Mulch paths",
+                "description": "Spread mulch on the shared paths.",
+                "garden": self.garden.id,
+                "plot": self.plot.id,
+                "priority": HelpRequest.Priority.MEDIUM,
+                "category": HelpRequest.Category.MAINTENANCE,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        mock_notify.assert_called_once()
+        notified = mock_notify.call_args.args[0]
+        self.assertEqual(notified.title, "Mulch paths")
+        self.assertEqual(notified.garden_id, self.garden.id)
+
     def test_help_requests_can_be_crud_without_authentication(self):
         self.client.credentials()
 
@@ -169,6 +194,112 @@ class HelpRequestAPITests(APITestCase):
         )
         self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(HelpRequest.objects.filter(id=help_request.id).exists())
+
+
+class HelpRequestResendClaimTests(APITestCase):
+    """Admin polish: resend-claim returns garden-member address count."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.admin = User.objects.create_user(
+            username="gardenadmin",
+            email="gardenadmin@example.com",
+            password="password",
+            is_approved=True,
+            is_garden_admin=True,
+        )
+        cls.member = User.objects.create_user(
+            username="member",
+            email="member@example.com",
+            password="password",
+            is_approved=True,
+            is_garden_admin=False,
+        )
+        cls.garden = Garden.objects.create(name="Resend Garden")
+        cls.plot = Plot.objects.create(garden=cls.garden, plot_number="9")
+
+        # Two active approved members → resend should report recipients=2.
+        for email in ("alpha@example.com", "beta@example.com"):
+            user = User.objects.create_user(
+                username=email,
+                email=email,
+                password="password",
+                is_approved=True,
+            )
+            GardenMembership.objects.create(
+                garden=cls.garden,
+                user=user,
+                status="active",
+            )
+
+        cls.unclaimed = HelpRequest.objects.create(
+            title="Unclaimed fence repair",
+            description="Needs volunteers.",
+            garden=cls.garden,
+            plot=cls.plot,
+            created_by=cls.admin,
+            assigned_to=None,
+            status=HelpRequest.Status.ACTIVE,
+        )
+        cls.assigned = HelpRequest.objects.create(
+            title="Already claimed",
+            description="Has an assignee.",
+            garden=cls.garden,
+            created_by=cls.admin,
+            assigned_to=cls.member,
+            status=HelpRequest.Status.PENDING,
+        )
+        cls.done = HelpRequest.objects.create(
+            title="Finished task",
+            description="Already done.",
+            garden=cls.garden,
+            created_by=cls.admin,
+            status=HelpRequest.Status.DONE,
+        )
+
+    def _auth(self, user):
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(user).access_token}"
+        )
+
+    @patch("notifications.services.email.send_mail", return_value=1)
+    def test_garden_admin_resend_returns_member_address_count(self, mock_send_mail):
+        self._auth(self.admin)
+        response = self.client.post(
+            reverse("help-request-resend-claim", kwargs={"pk": self.unclaimed.id}),
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # send_mail returns 1 (messages); API must expose address count (2).
+        self.assertEqual(response.data["recipients"], 2)
+        self.assertEqual(response.data["detail"], "Claim email resent.")
+        mock_send_mail.assert_called_once()
+        self.assertEqual(len(mock_send_mail.call_args.kwargs["recipient_list"]), 2)
+
+    def test_member_cannot_resend_claim(self):
+        self._auth(self.member)
+        response = self.client.post(
+            reverse("help-request-resend-claim", kwargs={"pk": self.unclaimed.id}),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_resend_rejects_assigned_request(self):
+        self._auth(self.admin)
+        response = self.client.post(
+            reverse("help-request-resend-claim", kwargs={"pk": self.assigned.id}),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_resend_rejects_done_request(self):
+        self._auth(self.admin)
+        response = self.client.post(
+            reverse("help-request-resend-claim", kwargs={"pk": self.done.id}),
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
 
 class HelpRequestModelTests(TestCase):
