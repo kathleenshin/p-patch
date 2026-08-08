@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 
 from plots.models import Garden
 
+from .services.air_quality import AirQualityService, AirQualityServiceError
 from .services.open_meteo import OpenMeteoService, WeatherServiceError
 
 
@@ -50,5 +51,16 @@ class WeatherForecastView(APIView):
                 {"detail": str(exc)},
                 status=status.HTTP_502_BAD_GATEWAY,
             )
+
+        try:
+            data["air_quality"] = AirQualityService.get_current(
+                latitude=float(garden.latitude),
+                longitude=float(garden.longitude),
+            )
+        except AirQualityServiceError:
+            data["air_quality"] = {
+                "us_aqi": None,
+                "label": "Unavailable",
+            }
 
         return Response(data)

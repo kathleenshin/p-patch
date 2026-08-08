@@ -4,10 +4,8 @@ Retrieves current conditions and a seven-day forecast from Open-Meteo.
 The provider response is normalized into a frontend-friendly structure.
 """
 
-import json
-from pathlib import Path
-
-import requests
+from .open_meteo_client import OpenMeteoClient, OpenMeteoError
+from .weather_codes import description_for
 
 
 class WeatherServiceError(Exception):
@@ -16,113 +14,63 @@ class WeatherServiceError(Exception):
 
 class OpenMeteoService:
     BASE_URL = "https://api.open-meteo.com/v1/forecast"
-    TIMEZONE = "America/Los_Angeles"
-    _DESCRIPTIONS_PATH = (
-        Path(__file__).resolve().parent.parent
-        / "data"
-        / "weather_descriptions.json"
-    )
-    _descriptions_cache = None
 
-    @classmethod
-    def _description_map(cls):
-        if cls._descriptions_cache is None:
-            with cls._DESCRIPTIONS_PATH.open("r", encoding="utf-8") as handle:
-                cls._descriptions_cache = json.load(handle)
+    CURRENT_FIELDS = [
+        "temperature_2m",
+        "apparent_temperature",
+        "relative_humidity_2m",
+        "weather_code",
+        "wind_speed_10m",
+    ]
 
-        return cls._descriptions_cache
+    DAILY_FIELDS = [
+        "weather_code",
+        "temperature_2m_max",
+        "temperature_2m_min",
+        "precipitation_probability_max",
+        "precipitation_sum",
+        "uv_index_max",
+    ]
 
-    @classmethod
-    def _description_for(cls, weather_code, *, is_day=True):
-        descriptions = cls._description_map()
-        code_map = descriptions.get(str(weather_code))
-
-        if not isinstance(code_map, dict):
-            return "Mixed"
-
-        period = "day" if is_day else "night"
-        return code_map.get(period) or code_map.get("day") or "Mixed"
-
-    # TODO: Implement caching to reduce the number of requests to Open-Meteo.
+    # TODO: Implement caching to reduce requests to Open-Meteo.
     @classmethod
     def get_forecast(cls, latitude, longitude):
         try:
-            response = requests.get(
+            payload = OpenMeteoClient.get(
                 cls.BASE_URL,
-                params={
+                {
                     "latitude": latitude,
                     "longitude": longitude,
-                    "current": [
-                        "temperature_2m",
-                        "apparent_temperature",
-                        "relative_humidity_2m",
-                        "weather_code",
-                        "wind_speed_10m",
-                        "surface_pressure",
-                        "visibility",
-                    ],
-                    "daily": [
-                        "weather_code",
-                        "temperature_2m_max",
-                        "temperature_2m_min",
-                        "precipitation_probability_max",
-                        "precipitation_sum",
-                        "uv_index_max",
-                    ],
+                    "current": cls.CURRENT_FIELDS,
+                    "daily": cls.DAILY_FIELDS,
                     "temperature_unit": "fahrenheit",
                     "wind_speed_unit": "mph",
                     "precipitation_unit": "inch",
-                    "timezone": cls.TIMEZONE,
                     "forecast_days": 7,
                 },
-                timeout=10,
             )
 
-            response.raise_for_status()
+            return cls._normalize(payload)
 
-        except requests.RequestException as exc:
+        except (
+            OpenMeteoError,
+            KeyError,
+            TypeError,
+            IndexError,
+        ) as exc:
             raise WeatherServiceError(
-                "Unable to retrieve weather data from Open-Meteo."
-            ) from exc
-
-        try:
-            return cls._normalize(response.json())
-        except (KeyError, TypeError, IndexError) as exc:
-            raise WeatherServiceError(
-                "Open-Meteo returned invalid weather data."
+                "Unable to retrieve valid weather data."
             ) from exc
 
     @classmethod
     def _normalize(cls, payload):
-        """Convert Open-Meteo's response into a frontend-friendly format."""
-
         current = payload["current"]
         daily = payload["daily"]
 
-        forecast = []
-
-        for i, date in enumerate(daily["time"]):
-            code = daily["weather_code"][i]
-            forecast.append(
-                {
-                    "date": date,
-                    "weather_code": code,
-                    "weather_description": cls._description_for(code, is_day=True),
-                    "high_temperature_f": daily[
-                        "temperature_2m_max"
-                    ][i],
-                    "low_temperature_f": daily[
-                        "temperature_2m_min"
-                    ][i],
-                    "precipitation_probability_percent": daily[
-                        "precipitation_probability_max"
-                    ][i],
-                    "precipitation_inches": daily[
-                        "precipitation_sum"
-                    ][i],
-                    "uv_index_max": daily["uv_index_max"][i],
-                }
-            )
+        forecast = [
+            cls._normalize_day(daily, i, date)
+            for i, date in enumerate(daily["time"])
+        ]
 
         return {
             "current": {
@@ -130,14 +78,46 @@ class OpenMeteoService:
                 "feels_like_f": current["apparent_temperature"],
                 "humidity_percent": current["relative_humidity_2m"],
                 "weather_code": current["weather_code"],
-                "weather_description": cls._description_for(
+                "weather_description": description_for(
                     current["weather_code"],
                     is_day=True,
                 ),
                 "wind_speed_mph": current["wind_speed_10m"],
-                "pressure_hpa": current["surface_pressure"],
-                "visibility_meters": current["visibility"],
                 "uv_index": daily["uv_index_max"][0],
+                "precipitation_probability_percent": daily[
+                    "precipitation_probability_max"
+                ][0],
+                "precipitation_inches": daily[
+                    "precipitation_sum"
+                ][0],
             },
             "forecast": forecast,
+        }
+
+    @staticmethod
+    def _normalize_day(daily, index, date):
+        weather_code = daily["weather_code"][index]
+
+        return {
+            "date": date,
+            "weather_code": weather_code,
+            "weather_description": description_for(
+                weather_code,
+                is_day=True,
+            ),
+            "high_temperature_f": daily[
+                "temperature_2m_max"
+            ][index],
+            "low_temperature_f": daily[
+                "temperature_2m_min"
+            ][index],
+            "precipitation_probability_percent": daily[
+                "precipitation_probability_max"
+            ][index],
+            "precipitation_inches": daily[
+                "precipitation_sum"
+            ][index],
+            "uv_index_max": daily[
+                "uv_index_max"
+            ][index],
         }

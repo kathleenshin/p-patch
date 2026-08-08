@@ -59,6 +59,8 @@ export function WeekWeatherWidget({
             <button
               key={d.date}
               onClick={() => onSelectDate?.(d.date)}
+              aria-pressed={d.date === activeDate}
+              aria-label={`Select forecast for ${new Date(`${d.date}T12:00:00`).toLocaleDateString(undefined, { weekday: "long" })}`}
               style={{
                 display: "flex",
                 flexDirection: "column",

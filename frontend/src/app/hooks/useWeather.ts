@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchWeather, type WeatherResponse } from "@/api/weather";
 import { useAuth } from "../auth/AuthContext";
 
@@ -8,11 +8,6 @@ export function useWeather(gardenId?: number | null) {
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [weatherError, setWeatherError] = useState<string | null>(null);
-
-  const resolvedGardenId = useMemo(
-    () => gardenId ?? null,
-    [gardenId],
-  );
 
   useEffect(() => {
     let cancelled = false;
@@ -28,7 +23,7 @@ export function useWeather(gardenId?: number | null) {
         return;
       }
 
-      if (!resolvedGardenId) {
+      if (!gardenId) {
         if (!cancelled) {
           setWeather(null);
           setWeatherError("No garden is available for weather lookup.");
@@ -43,7 +38,7 @@ export function useWeather(gardenId?: number | null) {
           setWeatherError(null);
         }
 
-        const data = await fetchWeather(accessToken, resolvedGardenId, controller.signal);
+        const data = await fetchWeather(accessToken, gardenId, controller.signal);
 
         if (!cancelled) {
           setWeather(data);
@@ -70,7 +65,7 @@ export function useWeather(gardenId?: number | null) {
       cancelled = true;
       controller.abort();
     };
-  }, [accessToken, resolvedGardenId]);
+  }, [accessToken, gardenId]);
 
   return {
     weather,

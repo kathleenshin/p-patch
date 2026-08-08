@@ -1,5 +1,4 @@
-import requests
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -8,13 +7,16 @@ from rest_framework_simplejwt.tokens import AccessToken
 
 from plots.models import Garden
 
+from .services.air_quality import AirQualityService, AirQualityServiceError
 from .services.open_meteo import OpenMeteoService, WeatherServiceError
+from .services.open_meteo_client import OpenMeteoError
 
 
 WEATHER_FORECAST_URL_NAME = "weather-forecast"
 AUTH_TEST_EMAIL = "weather-test@example.com"
 AUTH_TEST_PASSWORD = "password123"
-OPEN_METEO_UNAVAILABLE_DETAIL = "Unable to retrieve weather data from Open-Meteo."
+OPEN_METEO_UNAVAILABLE_DETAIL = "Unable to retrieve valid weather data."
+AIR_QUALITY_UNAVAILABLE_DETAIL = "Unable to retrieve valid air quality data."
 
 
 class WeatherTestFixtures(TestCase):
@@ -53,7 +55,7 @@ class WeatherTestFixtures(TestCase):
         return client.get(self.weather_url(), params)
 
     @staticmethod
-    def sample_raw_payload():
+    def sample_raw_weather_payload():
         return {
             "current": {
                 "temperature_2m": 70.0,
@@ -61,8 +63,6 @@ class WeatherTestFixtures(TestCase):
                 "relative_humidity_2m": 55,
                 "weather_code": 1,
                 "wind_speed_10m": 5.0,
-                "surface_pressure": 1012.0,
-                "visibility": 12000,
             },
             "daily": {
                 "time": ["2026-08-01", "2026-08-02"],
@@ -76,7 +76,7 @@ class WeatherTestFixtures(TestCase):
         }
 
     @staticmethod
-    def sample_normalized_payload():
+    def sample_normalized_weather_payload():
         return {
             "current": {
                 "temperature_f": 70.0,
@@ -85,9 +85,9 @@ class WeatherTestFixtures(TestCase):
                 "weather_code": 1,
                 "weather_description": "Mainly Sunny",
                 "wind_speed_mph": 5.0,
-                "pressure_hpa": 1012.0,
-                "visibility_meters": 12000,
                 "uv_index": 5.4,
+                "precipitation_probability_percent": 10,
+                "precipitation_inches": 0.0,
             },
             "forecast": [
                 {
@@ -114,11 +114,24 @@ class WeatherTestFixtures(TestCase):
         }
 
     @staticmethod
-    def build_success_response(payload):
-        response = Mock()
-        response.raise_for_status.return_value = None
-        response.json.return_value = payload
-        return response
+    def sample_air_quality_raw_payload():
+        return {
+            "hourly": {
+                "us_aqi": [42],
+            }
+        }
+
+    @staticmethod
+    def sample_air_quality_payload():
+        return {
+            "us_aqi": 42,
+            "label": "Good",
+        }
+
+    def sample_view_payload(self):
+        payload = self.sample_normalized_weather_payload()
+        payload["air_quality"] = self.sample_air_quality_payload()
+        return payload
 
 
 class WeatherViewTests(WeatherTestFixtures):
@@ -160,9 +173,15 @@ class WeatherViewTests(WeatherTestFixtures):
             "Garden does not have coordinates.",
         )
 
+    @patch("weather.views.AirQualityService.get_current")
     @patch("weather.views.OpenMeteoService.get_forecast")
-    def test_uses_garden_coordinates(self, mock_get_forecast):
-        mock_get_forecast.return_value = self.sample_normalized_payload()
+    def test_uses_garden_coordinates(
+        self,
+        mock_get_forecast,
+        mock_get_air_quality,
+    ):
+        mock_get_forecast.return_value = self.sample_normalized_weather_payload()
+        mock_get_air_quality.return_value = self.sample_air_quality_payload()
 
         response = self.weather_get(
             client=self.client,
@@ -170,18 +189,45 @@ class WeatherViewTests(WeatherTestFixtures):
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            self.sample_normalized_payload(),
-        )
+        self.assertEqual(response.json(), self.sample_view_payload())
 
         mock_get_forecast.assert_called_once_with(
             latitude=47.6062,
             longitude=-122.3321,
         )
+        mock_get_air_quality.assert_called_once_with(
+            latitude=47.6062,
+            longitude=-122.3321,
+        )
+
+    @patch("weather.views.AirQualityService.get_current")
+    @patch("weather.views.OpenMeteoService.get_forecast")
+    def test_returns_weather_when_air_quality_fails(
+        self,
+        mock_get_forecast,
+        mock_get_air_quality,
+    ):
+        mock_get_forecast.return_value = self.sample_normalized_weather_payload()
+        mock_get_air_quality.side_effect = AirQualityServiceError(
+            AIR_QUALITY_UNAVAILABLE_DETAIL
+        )
+
+        response = self.weather_get(
+            client=self.client,
+            garden_id=self.garden_with_coordinates.id,
+        )
+
+        expected = self.sample_normalized_weather_payload()
+        expected["air_quality"] = {
+            "us_aqi": None,
+            "label": "Unavailable",
+        }
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), expected)
 
     @patch("weather.views.OpenMeteoService.get_forecast")
-    def test_returns_502_when_service_fails(self, mock_get_forecast):
+    def test_returns_502_when_weather_service_fails(self, mock_get_forecast):
         mock_get_forecast.side_effect = WeatherServiceError(
             OPEN_METEO_UNAVAILABLE_DETAIL
         )
@@ -208,42 +254,35 @@ class WeatherViewTests(WeatherTestFixtures):
 
 
 class OpenMeteoServiceTests(WeatherTestFixtures):
-    @patch("weather.services.open_meteo.requests.get")
+    @patch("weather.services.open_meteo.OpenMeteoClient.get")
     def test_get_forecast_normalizes_open_meteo_payload(
         self,
-        mock_get,
+        mock_client_get,
     ):
-        mock_get.return_value = self.build_success_response(
-            self.sample_raw_payload()
-        )
+        mock_client_get.return_value = self.sample_raw_weather_payload()
 
         weather = OpenMeteoService.get_forecast(
             latitude=47.6062,
             longitude=-122.3321,
         )
 
-        self.assertEqual(
-            weather,
-            self.sample_normalized_payload(),
-        )
+        self.assertEqual(weather, self.sample_normalized_weather_payload())
 
-    @patch("weather.services.open_meteo.requests.get")
+    @patch("weather.services.open_meteo.OpenMeteoClient.get")
     def test_get_forecast_sends_expected_request_parameters(
         self,
-        mock_get,
+        mock_client_get,
     ):
-        mock_get.return_value = self.build_success_response(
-            self.sample_raw_payload()
-        )
+        mock_client_get.return_value = self.sample_raw_weather_payload()
 
         OpenMeteoService.get_forecast(
             latitude=47.6062,
             longitude=-122.3321,
         )
 
-        mock_get.assert_called_once_with(
+        mock_client_get.assert_called_once_with(
             OpenMeteoService.BASE_URL,
-            params={
+            {
                 "latitude": 47.6062,
                 "longitude": -122.3321,
                 "current": [
@@ -252,8 +291,6 @@ class OpenMeteoServiceTests(WeatherTestFixtures):
                     "relative_humidity_2m",
                     "weather_code",
                     "wind_speed_10m",
-                    "surface_pressure",
-                    "visibility",
                 ],
                 "daily": [
                     "weather_code",
@@ -266,18 +303,16 @@ class OpenMeteoServiceTests(WeatherTestFixtures):
                 "temperature_unit": "fahrenheit",
                 "wind_speed_unit": "mph",
                 "precipitation_unit": "inch",
-                "timezone": OpenMeteoService.TIMEZONE,
                 "forecast_days": 7,
             },
-            timeout=10,
         )
 
-    @patch("weather.services.open_meteo.requests.get")
+    @patch("weather.services.open_meteo.OpenMeteoClient.get")
     def test_get_forecast_raises_error_on_request_failure(
         self,
-        mock_get,
+        mock_client_get,
     ):
-        mock_get.side_effect = requests.RequestException("boom")
+        mock_client_get.side_effect = OpenMeteoError("boom")
 
         with self.assertRaisesRegex(
             WeatherServiceError,
@@ -288,43 +323,95 @@ class OpenMeteoServiceTests(WeatherTestFixtures):
                 longitude=-122.3321,
             )
 
-    @patch("weather.services.open_meteo.requests.get")
-    def test_get_forecast_raises_error_for_non_200_response(
-        self,
-        mock_get,
-    ):
-        response = Mock()
-        response.raise_for_status.side_effect = requests.HTTPError(
-            "Service unavailable"
-        )
-        mock_get.return_value = response
-
-        with self.assertRaisesRegex(
-            WeatherServiceError,
-            OPEN_METEO_UNAVAILABLE_DETAIL,
-        ):
-            OpenMeteoService.get_forecast(
-                latitude=47.6062,
-                longitude=-122.3321,
-            )
-
-    @patch("weather.services.open_meteo.requests.get")
+    @patch("weather.services.open_meteo.OpenMeteoClient.get")
     def test_get_forecast_raises_error_for_malformed_payload(
         self,
-        mock_get,
+        mock_client_get,
     ):
-        mock_get.return_value = self.build_success_response(
-            {
-                "current": {},
-                "daily": {},
-            }
-        )
+        mock_client_get.return_value = {
+            "current": {},
+            "daily": {},
+        }
 
         with self.assertRaisesRegex(
             WeatherServiceError,
-            "Open-Meteo returned invalid weather data.",
+            OPEN_METEO_UNAVAILABLE_DETAIL,
         ):
             OpenMeteoService.get_forecast(
+                latitude=47.6062,
+                longitude=-122.3321,
+            )
+
+
+class AirQualityServiceTests(WeatherTestFixtures):
+    @patch("weather.services.air_quality.OpenMeteoClient.get")
+    def test_get_current_normalizes_payload(
+        self,
+        mock_client_get,
+    ):
+        mock_client_get.return_value = self.sample_air_quality_raw_payload()
+
+        air_quality = AirQualityService.get_current(
+            latitude=47.6062,
+            longitude=-122.3321,
+        )
+
+        self.assertEqual(air_quality, self.sample_air_quality_payload())
+
+    @patch("weather.services.air_quality.OpenMeteoClient.get")
+    def test_get_current_sends_expected_request_parameters(
+        self,
+        mock_client_get,
+    ):
+        mock_client_get.return_value = self.sample_air_quality_raw_payload()
+
+        AirQualityService.get_current(
+            latitude=47.6062,
+            longitude=-122.3321,
+        )
+
+        mock_client_get.assert_called_once_with(
+            AirQualityService.BASE_URL,
+            {
+                "latitude": 47.6062,
+                "longitude": -122.3321,
+                "hourly": ["us_aqi"],
+                "forecast_days": 1,
+            },
+        )
+
+    @patch("weather.services.air_quality.OpenMeteoClient.get")
+    def test_get_current_raises_error_on_request_failure(
+        self,
+        mock_client_get,
+    ):
+        mock_client_get.side_effect = OpenMeteoError("boom")
+
+        with self.assertRaisesRegex(
+            AirQualityServiceError,
+            AIR_QUALITY_UNAVAILABLE_DETAIL,
+        ):
+            AirQualityService.get_current(
+                latitude=47.6062,
+                longitude=-122.3321,
+            )
+
+    @patch("weather.services.air_quality.OpenMeteoClient.get")
+    def test_get_current_raises_error_for_malformed_payload(
+        self,
+        mock_client_get,
+    ):
+        mock_client_get.return_value = {
+            "hourly": {
+                "us_aqi": [None],
+            }
+        }
+
+        with self.assertRaisesRegex(
+            AirQualityServiceError,
+            AIR_QUALITY_UNAVAILABLE_DETAIL,
+        ):
+            AirQualityService.get_current(
                 latitude=47.6062,
                 longitude=-122.3321,
             )

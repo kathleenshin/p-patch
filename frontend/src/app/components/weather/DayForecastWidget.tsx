@@ -1,5 +1,5 @@
 import { type ElementType } from "react";
-import { Sun, Droplets, Wind, Gauge, Thermometer, Eye, ArrowRight } from "lucide-react";
+import { Sun, Droplets, Wind, Gauge, Thermometer, Leaf, ArrowRight } from "lucide-react";
 import { C, mono } from "../../theme";
 import type { WeatherResponse } from "@/api/weather";
 import { WeatherIcon } from "./WeatherIcon";
@@ -70,38 +70,35 @@ export function DayForecastWidget({
     ?? current?.weather_description
     ?? "Weather unavailable";
 
-  const visibilityMiles =
-    current == null
-      ? null
-      : Math.round((current.visibility_meters * 0.000621371) * 10) / 10;
-
   const stats: { Icon: ElementType; val: string; label: string }[] =
     usingSelectedForecast
       ? [
           {
             Icon: Droplets,
-            val: `${Math.round(selectedForecast.precipitation_probability_percent)}%`,
-            label: "Precip Chance",
+            val: current ? `${Math.round(current.humidity_percent)}%` : "--",
+            label: "Humidity",
           },
           {
             Icon: Wind,
-            val: `${selectedForecast.precipitation_inches.toFixed(2)} in`,
-            label: "Precip",
+            val: current ? `${Math.round(current.wind_speed_mph)} mph` : "--",
+            label: "Wind",
           },
           {
             Icon: Gauge,
-            val: `${Math.round(selectedForecast.uv_index_max)}`,
-            label: "UV Max",
+            val: `${Math.round(selectedForecast.precipitation_probability_percent)}%`,
+            label: "Chance of Rain",
           },
           {
             Icon: Thermometer,
-            val: `${Math.round(selectedForecast.high_temperature_f)}°`,
-            label: "High",
+            val: `UV ${Math.round(selectedForecast.uv_index_max)}`,
+            label: "UV Index",
           },
           {
-            Icon: Eye,
-            val: `${Math.round(selectedForecast.low_temperature_f)}°`,
-            label: "Low",
+            Icon: Leaf,
+            val: weather?.air_quality.us_aqi == null
+              ? weather?.air_quality.label ?? "Unavailable"
+              : `${weather.air_quality.us_aqi} ${weather.air_quality.label}`,
+            label: "Air Quality",
           },
         ]
       : [
@@ -117,8 +114,10 @@ export function DayForecastWidget({
           },
           {
             Icon: Gauge,
-            val: current ? `${Math.round(current.pressure_hpa)} mb` : "--",
-            label: "Pressure",
+            val: current
+              ? `${Math.round(current.precipitation_probability_percent)}%`
+              : "--",
+            label: "Chance of Rain",
           },
           {
             Icon: Thermometer,
@@ -126,9 +125,11 @@ export function DayForecastWidget({
             label: "UV Index",
           },
           {
-            Icon: Eye,
-            val: visibilityMiles == null ? "--" : `${visibilityMiles} mi`,
-            label: "Visibility",
+            Icon: Leaf,
+            val: weather?.air_quality.us_aqi == null
+              ? weather?.air_quality.label ?? "Unavailable"
+              : `${weather.air_quality.us_aqi} ${weather.air_quality.label}`,
+            label: "Air Quality",
           },
         ];
 

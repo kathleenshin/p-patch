@@ -7,9 +7,14 @@ export interface WeatherCurrent {
   weather_code: number;
   weather_description: string;
   wind_speed_mph: number;
-  pressure_hpa: number;
-  visibility_meters: number;
   uv_index: number;
+  precipitation_probability_percent: number;
+  precipitation_inches: number;
+}
+
+export interface WeatherAirQuality {
+  us_aqi: number | null;
+  label: string;
 }
 
 export interface WeatherForecastDay {
@@ -26,6 +31,7 @@ export interface WeatherForecastDay {
 export interface WeatherResponse {
   current: WeatherCurrent;
   forecast: WeatherForecastDay[];
+  air_quality: WeatherAirQuality;
 }
 
 export async function fetchWeather(
