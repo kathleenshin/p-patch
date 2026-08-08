@@ -14,36 +14,78 @@ export function usePlotNotes(plotId?: number) {
   const [notesLoading, setNotesLoading] = useState(true);
   const [notesError, setNotesError] = useState<string | null>(null);
 
+  const createNote = useCallback(
+    async (
+      content: string,
+      visibility: CreatePlotNoteInput["visibility"]
+    ) => {
+      if (!accessToken) {
+        throw new Error("You must be signed in to add a note.");
+      }
+
+      if (!plotId) {
+        throw new Error("Select a plot before adding a note.");
+      }
+
+      const created = await createPlotNote(accessToken, {
+        plot: plotId,
+        content,
+        visibility,
+      });
+
+      setNotes((current) => [created, ...current]);
+      return created;
+    },
+    [accessToken, plotId]
+  );
+
   useEffect(() => {
+    let ignore = false;
+
     async function loadNotes() {
       if (!accessToken || !plotId) {
-        setNotes([]);
-        setNotesLoading(false);
+        if (!ignore) {
+          setNotes([]);
+          setNotesError(null);
+          setNotesLoading(false);
+        }
         return;
       }
 
       try {
-        setNotesLoading(true);
-        setNotesError(null);
+        if (!ignore) {
+          setNotesLoading(true);
+          setNotesError(null);
+        }
 
         const data = await fetchPlotNotes(
           accessToken,
           plotId
         );
 
-        setNotes(data);
+        if (!ignore) {
+          setNotes(data);
+        }
       } catch (error) {
-        setNotesError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load plot notes."
-        );
+        if (!ignore) {
+          setNotesError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load plot notes."
+          );
+        }
       } finally {
-        setNotesLoading(false);
+        if (!ignore) {
+          setNotesLoading(false);
+        }
       }
     }
 
     void loadNotes();
+
+    return () => {
+      ignore = true;
+    };
   }, [accessToken, plotId]);
 
   return {

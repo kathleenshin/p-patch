@@ -67,10 +67,6 @@ export function PlotScreen({
   const secondaryOwners =
     focusPlot?.owners
       .filter((owner) => !owner.is_primary)
-
-  const secondaryOwners =
-    focusPlot?.owners
-      .filter((owner) => !owner.is_primary)
       .map((owner, index) => {
         const initials = owner.name
           .split(/[\s.@_-]+/)
