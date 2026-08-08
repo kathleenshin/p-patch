@@ -6,6 +6,7 @@ import {
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import type { Screen } from "../types";
 import { useAuth } from "../auth/AuthContext";
+import { usePlots } from "../hooks/usePlots";
 import {
   approveUser,
   fetchPendingUsers,
@@ -69,11 +70,6 @@ function formatDueDate(dueDate: string | null): string {
     month: "long",
     day: "numeric",
   });
-}
-
-/** Unclaimed = no assignee and not completed. */
-function isUnclaimedHelpRequest(request: HelpRequest): boolean {
-  return request.assigned_to == null && request.status !== "done";
 }
 
 export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
@@ -355,17 +351,11 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     { label: "Pending Registrations", value: pendingUsers.length, color: C.terra, Icon: Users, action: () => setListModal("pending") },
     // Live approved count from GET /api/auth/users/ — sits beside Pending.
     { label: "Approved Members", value: approvedMemberCount, color: C.sage, Icon: UserCheck, action: () => {}, hint: "Garden members" },
-    { label: "Unassigned Plots", value: 3, color: C.amber, Icon: LayoutGrid, action: () => setScreen("plot") },
+    { label: "Unassigned Plots", value: unassignedPlots.length, color: C.amber, Icon: LayoutGrid, action: () => setScreen("plot") },
     // Live unclaimed count; opens the tasks View-all modal.
     { label: "Unclaimed Tasks", value: unclaimedTasks.length, color: C.lavender, Icon: ClipboardList, action: () => setListModal("tasks") },
     // Live inventory alert count; opens the inventory View-all modal.
     { label: "Inventory Alerts", value: inventoryAlerts.length, color: C.sky, Icon: Archive, action: () => setListModal("inventory") },
-  ];
-
-  const unassignedPlots = [
-    { id: 5,  zone: "North" },
-    { id: 12, zone: "South" },
-    { id: 21, zone: "East"  },
   ];
 
   const panel = (
@@ -714,23 +704,74 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
 
           {panel("Unassigned Plots", <LayoutGrid size={13} color={C.sage} />, viewAll(() => setScreen("plot")), (
             <div>
-              {unassignedPlots.map((p, i) => (
-                <div key={p.id} style={{ display: "flex", alignItems: "center",
-                  gap: "0.625rem", padding: "0.6875rem 1rem",
-                  borderBottom: i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none" }}>
-                  <div style={{ width: "2rem", height: "2rem", borderRadius: "0.5625rem", background: C.sageLight,
-                    flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                    <LayoutGrid size={14} color={C.sage} />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>Plot {p.id}</div>
-                    <div style={{ fontSize: "0.66rem", color: C.muted }}>{p.zone} Zone</div>
-                  </div>
-                  <button style={{ background: C.amberLight, color: C.amber, border: "none",
-                    borderRadius: "0.4375rem", padding: "0.25rem 0.75rem", fontSize: "0.68rem", fontWeight: 800,
-                    cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>Assign</button>
+              {plotsLoading ? (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+                  Loading plots…
                 </div>
-              ))}
+              ) : plotsError ? (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.terra, fontWeight: 600 }}>
+                  {plotsError}
+                </div>
+              ) : unassignedPlots.length === 0 ? (
+                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+                  No unassigned plots.
+                </div>
+              ) : (
+                unassignedPlots.map((p, i) => (
+                  <div
+                    key={p.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "0.625rem",
+                      padding: "0.6875rem 1rem",
+                      borderBottom:
+                        i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: "2rem",
+                        height: "2rem",
+                        borderRadius: "0.5625rem",
+                        background: C.sageLight,
+                        flexShrink: 0,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <LayoutGrid size={14} color={C.sage} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
+                        Plot {p.plot_number}
+                      </div>
+                      <div style={{ fontSize: "0.66rem", color: C.muted }}>
+                        {p.garden_name}
+                      </div>
+                    </div>
+                    <button
+                      disabled
+                      title="Plot assignment is not implemented yet"
+                      style={{
+                        background: C.amberLight,
+                        color: C.amber,
+                        border: "none",
+                        borderRadius: "0.4375rem",
+                        padding: "0.25rem 0.75rem",
+                        fontSize: "0.68rem",
+                        fontWeight: 800,
+                        cursor: "not-allowed",
+                        opacity: 0.6,
+                        fontFamily: "'Nunito', sans-serif",
+                      }}
+                    >
+                      Assign
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           ))}
 
