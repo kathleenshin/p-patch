@@ -16,7 +16,8 @@ class PlotNoteAPITests(BasePlotAPITestCase):
 
     def test_authenticated_user_can_list_notes(self):
         response = self.client.get(
-            self.plot_note_list_create_url
+            self.plot_note_list_create_url,
+            {"plot": self.plot.id},
         )
 
         self.assertEqual(response.status_code, 200)
@@ -24,6 +25,29 @@ class PlotNoteAPITests(BasePlotAPITestCase):
         self.assertEqual(
             response.json()[0]["content"],
             "Tomatoes were watered.",
+        )
+
+    def test_list_requires_plot_query_parameter(self):
+        response = self.client.get(
+            self.plot_note_list_create_url
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["plot"],
+            "This query parameter is required.",
+        )
+
+    def test_list_rejects_non_numeric_plot_query_parameter(self):
+        response = self.client.get(
+            self.plot_note_list_create_url,
+            {"plot": "not-a-number"},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json()["plot"],
+            "A numeric plot id is required.",
         )
 
     def test_authenticated_user_can_retrieve_note(self):
