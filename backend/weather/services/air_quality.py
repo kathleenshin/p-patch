@@ -1,5 +1,8 @@
 """Retrieves current air quality from Open-Meteo."""
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from .open_meteo_client import OpenMeteoClient, OpenMeteoError
 
 
@@ -25,13 +28,25 @@ class AirQualityService:
                 },
             )
 
+            times = payload["hourly"]["time"]
             values = payload["hourly"]["us_aqi"]
 
-            us_aqi = next(
-                value
-                for value in values
-                if value is not None
-            )
+            current_hour = datetime.now(
+                ZoneInfo("America/Los_Angeles")
+            ).strftime("%Y-%m-%dT%H:00")
+
+            try:
+                index = times.index(current_hour)
+                us_aqi = values[index]
+            except ValueError:
+                us_aqi = None
+
+            if us_aqi is None:
+                us_aqi = next(
+                    value
+                    for value in values
+                    if value is not None
+                )
 
             us_aqi = int(round(us_aqi))
 

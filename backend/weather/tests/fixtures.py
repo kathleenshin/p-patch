@@ -106,12 +106,17 @@ class WeatherTestFixtures(TestCase):
                 },
             ],
         }
-
+    
     @staticmethod
     def sample_air_quality_raw_payload():
         return {
             "hourly": {
-                "us_aqi": [42],
+                "time": [
+                    "2026-08-08T00:00",
+                    "2026-08-08T01:00",
+                    "2026-08-08T02:00",
+                ],
+                "us_aqi": [42, 55, 61],
             }
         }
 
