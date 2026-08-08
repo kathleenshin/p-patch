@@ -99,9 +99,7 @@ export function usePlots() {
           cachePlots = [];
           cacheError = message;
 
-          setPlotsError(
-            message
-          );
+          setPlotsError(message);
         }
       } finally {
         if (!ignore) {

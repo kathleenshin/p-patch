@@ -21,10 +21,10 @@ class PlotAPITests(BasePlotAPITestCase):
         response = self.client.get(self.plot_list_create_url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(len(response.json()), 1)
-        self.assertEqual(
-            response.json()[0]["plot_number"],
-            "1",
+        self.assertEqual(len(response.json()), 2)
+        self.assertCountEqual(
+            [plot["plot_number"] for plot in response.json()],
+            ["1", "2"],
         )
 
     def test_authenticated_user_can_retrieve_plot(self):
@@ -52,7 +52,7 @@ class PlotAPITests(BasePlotAPITestCase):
         self.assertTrue(
             Plot.objects.filter(
                 garden=self.garden,
-                plot_number="2",
+                plot_number=self.create_plot_payload["plot_number"],
             ).exists()
         )
 
@@ -171,7 +171,7 @@ class PlotAPITests(BasePlotAPITestCase):
         self.assertEqual(baseline_response.status_code, 200)
         baseline_count = len(baseline_ctx)
 
-        for idx in range(2, 19):
+        for idx in range(3, 19):
             plot = Plot.objects.create(
                 garden=self.garden,
                 plot_number=str(idx),
