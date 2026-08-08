@@ -1,5 +1,6 @@
-"""Retrieves current air quality from Open-Meteo."""
+"""Retrieves current and forecast air quality from Open-Meteo."""
 
+from collections import defaultdict
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -60,6 +61,55 @@ class AirQualityService:
             KeyError,
             TypeError,
             StopIteration,
+        ) as exc:
+            raise AirQualityServiceError(
+                "Unable to retrieve valid air quality data."
+            ) from exc
+
+    @classmethod
+    def get_daily_forecast(cls, latitude, longitude):
+        try:
+            payload = OpenMeteoClient.get(
+                cls.BASE_URL,
+                {
+                    "latitude": latitude,
+                    "longitude": longitude,
+                    "hourly": ["us_aqi"],
+                    "forecast_days": 7,
+                },
+            )
+
+            times = payload["hourly"]["time"]
+            values = payload["hourly"]["us_aqi"]
+
+            values_by_date = defaultdict(list)
+
+            for timestamp, us_aqi in zip(times, values):
+                if us_aqi is not None:
+                    date = timestamp.split("T")[0]
+                    values_by_date[date].append(us_aqi)
+
+            forecast = []
+
+            for date, daily_values in values_by_date.items():
+                average = int(
+                    round(sum(daily_values) / len(daily_values))
+                )
+
+                forecast.append(
+                    {
+                        "date": date,
+                        "us_aqi_average": average,
+                        "label": cls._label_for(average),
+                    }
+                )
+
+            return forecast
+
+        except (
+            OpenMeteoError,
+            KeyError,
+            TypeError,
         ) as exc:
             raise AirQualityServiceError(
                 "Unable to retrieve valid air quality data."

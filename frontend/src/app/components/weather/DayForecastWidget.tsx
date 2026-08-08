@@ -60,6 +60,12 @@ export function DayForecastWidget({
 
   const current = weather?.current;
   const usingSelectedForecast = selectedForecast != null;
+  const todayKey = formatDateKey(new Date());
+  const isSelectedCurrentDay = selectedForecast?.date === todayKey;
+  const hasAirQualityForecast = Array.isArray(weather?.air_quality?.forecast);
+  const dailyAirQuality = selectedForecast
+    ? weather?.air_quality.forecast.find((aqi) => aqi.date === selectedForecast.date)
+    : null;
 
   const iconType = weatherCodeToIconType(
     selectedForecast?.weather_code ?? current?.weather_code,
@@ -95,9 +101,11 @@ export function DayForecastWidget({
           },
           {
             Icon: Leaf,
-            val: weather?.air_quality.us_aqi == null
-              ? weather?.air_quality.label ?? "Unavailable"
-              : `${weather.air_quality.us_aqi} ${weather.air_quality.label}`,
+            val: weatherError || !hasAirQualityForecast
+              ? "Unavailable"
+              : dailyAirQuality?.us_aqi_average == null
+                ? (isSelectedCurrentDay ? "Unavailable" : "No forecast")
+                : `${dailyAirQuality.us_aqi_average} ${dailyAirQuality.label}`,
             label: "Air Quality",
           },
         ]
@@ -126,9 +134,9 @@ export function DayForecastWidget({
           },
           {
             Icon: Leaf,
-            val: weather?.air_quality.us_aqi == null
-              ? weather?.air_quality.label ?? "Unavailable"
-              : `${weather.air_quality.us_aqi} ${weather.air_quality.label}`,
+            val: weather?.air_quality.current.us_aqi == null
+              ? weather?.air_quality.current.label ?? "Unavailable"
+              : `${weather.air_quality.current.us_aqi} ${weather.air_quality.current.label}`,
             label: "Air Quality",
           },
         ];

@@ -13,8 +13,15 @@ export interface WeatherCurrent {
 }
 
 export interface WeatherAirQuality {
-  us_aqi: number | null;
-  label: string;
+  current: {
+    us_aqi: number | null;
+    label: string;
+  };
+  forecast: Array<{
+    date: string;
+    us_aqi_average: number;
+    label: string;
+  }>;
 }
 
 export interface WeatherForecastDay {
