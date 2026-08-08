@@ -76,6 +76,23 @@ export function DayForecastWidget({
     ?? current?.weather_description
     ?? "Weather unavailable";
 
+  function getForecastAirQualityValue() {
+    if (weatherError || !hasAirQualityForecast) {
+      return "Unavailable";
+    }
+    if (dailyAirQuality?.us_aqi_average == null) {
+      return isSelectedCurrentDay ? "Unavailable" : "No forecast";
+    }
+    return `${dailyAirQuality.us_aqi_average} ${dailyAirQuality.label}`;
+  }
+
+  function getCurrentAirQualityValue() {
+    if (weather?.air_quality.current.us_aqi == null) {
+      return weather?.air_quality.current.label ?? "Unavailable";
+    }
+    return `${weather.air_quality.current.us_aqi} ${weather.air_quality.current.label}`;
+  }
+
   const stats: { Icon: ElementType; val: string; label: string }[] =
     usingSelectedForecast
       ? [
@@ -101,11 +118,7 @@ export function DayForecastWidget({
           },
           {
             Icon: Leaf,
-            val: weatherError || !hasAirQualityForecast
-              ? "Unavailable"
-              : dailyAirQuality?.us_aqi_average == null
-                ? (isSelectedCurrentDay ? "Unavailable" : "No forecast")
-                : `${dailyAirQuality.us_aqi_average} ${dailyAirQuality.label}`,
+            val: getForecastAirQualityValue(),
             label: "Air Quality",
           },
         ]
@@ -134,9 +147,7 @@ export function DayForecastWidget({
           },
           {
             Icon: Leaf,
-            val: weather?.air_quality.current.us_aqi == null
-              ? weather?.air_quality.current.label ?? "Unavailable"
-              : `${weather.air_quality.current.us_aqi} ${weather.air_quality.current.label}`,
+            val: getCurrentAirQualityValue(),
             label: "Air Quality",
           },
         ];
