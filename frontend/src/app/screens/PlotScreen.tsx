@@ -1,8 +1,6 @@
 import { useState } from "react";
 import {
   ChevronRight,
-  Eye,
-  EyeOff,
   Plus,
   Pencil,
   MapPin,
@@ -14,6 +12,7 @@ import { C, serif, sans, mono, linkStyle } from "../theme";
 import type { Screen } from "../types";
 import { DayForecastWidget } from "../components/weather/DayForecastWidget";
 import { usePlots } from "../hooks/usePlots";
+import { usePlotNotes } from "../hooks/usePlotNotes";
 import plotBedIcon from "../../imports/PlotPageIcon.jpg";
 import plotPhoto from "../../imports/PlotHeroImage.jpg";
 
@@ -24,12 +23,6 @@ export function PlotScreen({
   setScreen: (s: Screen) => void;
   selectedPlotId?: number | null;
 }) {
-  const [publicNote, setPublicNote] = useState(
-    "Tomatoes planted Apr 12. Back row is garlic — hands off until July. Squash needs extra water."
-  );
-  const [privateNote, setPrivateNote] = useState(
-    "Soil amendment added Mar 2025. pH test due August."
-  );
   const [activeTab, setActiveTab] = useState<
     "overview" | "notes" | "gallery" | "history"
   >("overview");
@@ -46,6 +39,11 @@ export function PlotScreen({
       : plots.find((plot) => plot.id === selectedPlotId) ?? null;
 
   const focusPlot = selectedPlot ?? myPlot;
+  const {
+    notes,
+    notesLoading,
+    notesError,
+  } = usePlotNotes(focusPlot?.id);
 
   const primaryOwner =
     focusPlot?.owners.find((owner) => owner.is_primary) ??
@@ -100,38 +98,24 @@ export function PlotScreen({
     : [];
 
   const quickActions = [
-    { label: "Add Public Note", Icon: Plus },
-    { label: "Add Private Note", Icon: Plus },
+    { label: "Add Note", Icon: Plus },
     { label: "Upload Photo", Icon: Plus },
     { label: "View Plot on Map", Icon: MapPin },
     { label: "Print Plot Summary", Icon: ArrowRight },
   ];
 
-  const noteTA = (
-    value: string,
-    onChange: (v: string) => void,
-    bg: string
-  ) => (
-    <textarea
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      style={{
-        width: "100%",
-        boxSizing: "border-box",
-        border: `0.0938rem solid ${C.border}`,
-        borderRadius: "0.625rem",
-        padding: "0.625rem 0.75rem",
-        fontSize: "0.8rem",
-        color: C.brownMid,
-        background: bg,
-        fontFamily: "'Nunito', sans-serif",
-        resize: "vertical",
-        minHeight: "6.875rem",
-        outline: "none",
-        lineHeight: 1.6,
-      }}
-    />
-  );
+  const visibilityLabel = (visibility: string) => {
+    switch (visibility) {
+      case "this_plot":
+        return "This plot";
+      case "all_plots_in_garden":
+        return "All plots in garden";
+      case "garden_members":
+        return "Garden members";
+      default:
+        return visibility;
+    }
+  };
 
   if (plotsLoading) {
     return (
@@ -372,7 +356,6 @@ export function PlotScreen({
                 </button>
               ))}
             </div>
-
             {/* Plot Info + Notes */}
             <div
               style={{
@@ -445,182 +428,156 @@ export function PlotScreen({
               {/* Notes */}
               <div
                 style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: "0.875rem",
+                  background: C.card,
+                  border: `0.0625rem solid ${C.border}`,
+                  borderTop: `0.1875rem solid ${C.sage}`,
+                  borderRadius: "0.8125rem",
+                  padding: "0.875rem 1rem",
+                  boxShadow:
+                    "0 0.0625rem 0.25rem rgba(44,31,20,0.05)",
                 }}
               >
-                {/* Public Notes */}
                 <div
                   style={{
-                    background: C.card,
-                    border: `0.0625rem solid ${C.border}`,
-                    borderTop: `0.1875rem solid ${C.sage}`,
-                    borderRadius: "0.8125rem",
-                    padding: "0.875rem 1rem",
-                    boxShadow:
-                      "0 0.0625rem 0.25rem rgba(44,31,20,0.05)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    marginBottom: "0.75rem",
                   }}
                 >
-                  <div
+                  <h3
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: "0.5rem",
+                      ...serif,
+                      fontSize: "0.85rem",
+                      fontWeight: 700,
+                      color: C.brown,
+                      margin: 0,
                     }}
                   >
-                    <h3
-                      style={{
-                        ...serif,
-                        fontSize: "0.85rem",
-                        fontWeight: 700,
-                        color: C.brown,
-                        margin: 0,
-                      }}
-                    >
-                      Public Notes
-                    </h3>
+                    Plot Notes
+                  </h3>
 
-                    <button
-                      style={{
-                        background: C.sagePop,
-                        color: C.sage,
-                        border: `0.0625rem solid ${C.sageMid}`,
-                        borderRadius: "0.4375rem",
-                        padding: "0.1875rem 0.5625rem",
-                        fontSize: "0.7rem",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        fontFamily: "'Nunito', sans-serif",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.1875rem",
-                      }}
-                    >
-                      <Plus size={10} /> Add Note
-                    </button>
-                  </div>
-
-                  {noteTA(
-                    publicNote,
-                    setPublicNote,
-                    C.sagePop
-                  )}
-
-                  <div
+                  <button
+                    disabled
+                    title="Note creation is not connected yet"
                     style={{
-                      fontSize: "0.65rem",
+                      background: C.sagePop,
                       color: C.sage,
-                      marginTop: "0.3125rem",
+                      border: `0.0625rem solid ${C.sageMid}`,
+                      borderRadius: "0.4375rem",
+                      padding: "0.1875rem 0.5625rem",
+                      fontSize: "0.7rem",
                       fontWeight: 700,
+                      cursor: "not-allowed",
+                      opacity: 0.6,
+                      fontFamily: "'Nunito', sans-serif",
                       display: "flex",
                       alignItems: "center",
-                      gap: "0.25rem",
+                      gap: "0.1875rem",
                     }}
                   >
-                    <Eye size={11} color={C.sage} />
-                    Visible to all members
-                  </div>
+                    <Plus size={10} /> Add Note
+                  </button>
                 </div>
 
-                {/* Private Notes */}
-                <div
-                  style={{
-                    background: C.card,
-                    border: `0.0625rem solid ${C.border}`,
-                    borderTop: `0.1875rem solid ${C.terra}`,
-                    borderRadius: "0.8125rem",
-                    padding: "0.875rem 1rem",
-                    boxShadow:
-                      "0 0.0625rem 0.25rem rgba(44,31,20,0.05)",
-                  }}
-                >
+                {notesLoading ? (
                   <div
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      marginBottom: "0.5rem",
+                      color: C.muted,
+                      fontSize: "0.8rem",
+                      padding: "0.5rem 0",
                     }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.4375rem",
-                      }}
-                    >
-                      <h3
-                        style={{
-                          ...serif,
-                          fontSize: "0.85rem",
-                          fontWeight: 700,
-                          color: C.brown,
-                          margin: 0,
-                        }}
-                      >
-                        Private Notes
-                      </h3>
-
-                      <span
-                        style={{
-                          background: C.terra,
-                          color: C.white,
-                          fontSize: "0.54rem",
-                          fontWeight: 800,
-                          padding: "0.125rem 0.375rem",
-                          borderRadius: "0.3125rem",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.04em",
-                          ...mono,
-                        }}
-                      >
-                        Owners Only
-                      </span>
-                    </div>
-
-                    <button
-                      style={{
-                        background: C.terraLight,
-                        color: C.terra,
-                        border: `0.0625rem solid ${C.terra}44`,
-                        borderRadius: "0.4375rem",
-                        padding: "0.1875rem 0.5625rem",
-                        fontSize: "0.7rem",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        fontFamily: "'Nunito', sans-serif",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.1875rem",
-                      }}
-                    >
-                      <Plus size={10} /> Add Note
-                    </button>
+                    Loading notes...
                   </div>
-
-                  {noteTA(
-                    privateNote,
-                    setPrivateNote,
-                    C.terraLight
-                  )}
-
+                ) : notesError ? (
                   <div
                     style={{
-                      fontSize: "0.65rem",
                       color: C.terra,
-                      marginTop: "0.3125rem",
-                      fontWeight: 700,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.25rem",
+                      fontSize: "0.8rem",
+                      padding: "0.5rem 0",
                     }}
                   >
-                    <EyeOff size={11} color={C.terra} />
-                    Only visible to plot owners
+                    {notesError}
                   </div>
-                </div>
+                ) : notes.length === 0 ? (
+                  <div
+                    style={{
+                      color: C.muted,
+                      fontSize: "0.8rem",
+                      padding: "0.5rem 0",
+                    }}
+                  >
+                    No notes yet.
+                  </div>
+                ) : (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.625rem",
+                    }}
+                  >
+                    {notes.map((note) => (
+                      <div
+                        key={note.id}
+                        style={{
+                          background: C.cream,
+                          border: `0.0625rem solid ${C.border}`,
+                          borderRadius: "0.6875rem",
+                          padding: "0.75rem",
+                        }}
+                      >
+                        <div
+                          style={{
+                            fontSize: "0.8rem",
+                            color: C.brown,
+                            lineHeight: 1.5,
+                            whiteSpace: "pre-wrap",
+                          }}
+                        >
+                          {note.content}
+                        </div>
+
+                        <div
+                          style={{
+                            marginTop: "0.5rem",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            gap: "0.5rem",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div
+                            style={{
+                              fontSize: "0.65rem",
+                              color: C.muted,
+                            }}
+                          >
+                            {note.author} ·{" "}
+                            {new Date(
+                              note.created_at
+                            ).toLocaleDateString()}
+                          </div>
+
+                          <span
+                            style={{
+                              background: C.sagePop,
+                              color: C.sageDark,
+                              borderRadius: "1rem",
+                              padding: "0.125rem 0.4375rem",
+                              fontSize: "0.6rem",
+                              fontWeight: 700,
+                            }}
+                          >
+                            {visibilityLabel(note.visibility)}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -739,7 +696,6 @@ export function PlotScreen({
                 Manage stewards
               </button>
             </div>
-
             {/* Quick Actions */}
             <div
               style={{
