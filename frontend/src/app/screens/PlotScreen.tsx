@@ -13,6 +13,7 @@ import type { Screen } from "../types";
 import { DayForecastWidget } from "../components/weather/DayForecastWidget";
 import { usePlots } from "../hooks/usePlots";
 import { usePlotNotes } from "../hooks/usePlotNotes";
+import { useWeather } from "../hooks/useWeather";
 import plotBedIcon from "../../imports/PlotPageIcon.jpg";
 import plotPhoto from "../../imports/PlotHeroImage.jpg";
 
@@ -44,6 +45,9 @@ export function PlotScreen({
     notesLoading,
     notesError,
   } = usePlotNotes(focusPlot?.id);
+  const { weather, weatherLoading, weatherError } = useWeather(
+    focusPlot?.garden ?? null,
+  );
 
   const primaryOwner =
     focusPlot?.owners.find((owner) => owner.is_primary) ??
@@ -591,7 +595,12 @@ export function PlotScreen({
             }}
           >
             {/* Weather */}
-            <DayForecastWidget showWeekLink />
+            <DayForecastWidget
+              weather={weather}
+              weatherLoading={weatherLoading}
+              weatherError={weatherError}
+              showWeekLink
+            />
 
             {/* Secondary Owners */}
             <div

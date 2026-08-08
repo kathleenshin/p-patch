@@ -1,51 +1,136 @@
 import { type ElementType } from "react";
 import { Sun, Droplets, Wind, Gauge, Thermometer, Eye, ArrowRight } from "lucide-react";
 import { C, mono } from "../../theme";
-import { useWeather } from "../../hooks/useWeather";
+import type { WeatherResponse } from "@/api/weather";
 import { WeatherIcon } from "./WeatherIcon";
 import { weatherCodeToIconType } from "./weatherCode";
 
-export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boolean }) {
-  const { weather, weatherLoading, weatherError } = useWeather();
+type DayForecastWidgetProps = {
+  weather: WeatherResponse | null;
+  weatherLoading: boolean;
+  weatherError: string | null;
+  selectedDate?: string | null;
+  showWeekLink?: boolean;
+};
+
+function formatDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function headerLabel(selectedDate?: string | null) {
+  const toUpperDay = (dateKey: string) => {
+    const parsed = new Date(`${dateKey}T12:00:00`);
+    return parsed.toLocaleDateString(undefined, { weekday: "long" }).toUpperCase();
+  };
+
+  if (!selectedDate) {
+    return "TODAY";
+  }
+
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+
+  if (selectedDate === formatDateKey(today)) {
+    return "TODAY";
+  }
+
+  if (selectedDate === formatDateKey(tomorrow)) {
+    return `TOMORROW, ${toUpperDay(selectedDate)}`;
+  }
+
+  return toUpperDay(selectedDate);
+}
+
+export function DayForecastWidget({
+  weather,
+  weatherLoading,
+  weatherError,
+  selectedDate,
+  showWeekLink = false,
+}: DayForecastWidgetProps) {
+
+  const selectedForecast =
+    selectedDate == null
+      ? null
+      : weather?.forecast.find((day) => day.date === selectedDate) ?? null;
 
   const current = weather?.current;
+  const usingSelectedForecast = selectedForecast != null;
 
-  const iconType = weatherCodeToIconType(current?.weather_code);
+  const iconType = weatherCodeToIconType(
+    selectedForecast?.weather_code ?? current?.weather_code,
+  );
 
-  const description = current?.weather_description ?? "Weather unavailable";
+  const description =
+    selectedForecast?.weather_description
+    ?? current?.weather_description
+    ?? "Weather unavailable";
 
   const visibilityMiles =
     current == null
       ? null
       : Math.round((current.visibility_meters * 0.000621371) * 10) / 10;
 
-  const stats: { Icon: ElementType; val: string; label: string }[] = [
-    {
-      Icon: Droplets,
-      val: current ? `${Math.round(current.humidity_percent)}%` : "--",
-      label: "Humidity",
-    },
-    {
-      Icon: Wind,
-      val: current ? `${Math.round(current.wind_speed_mph)} mph` : "--",
-      label: "Wind",
-    },
-    {
-      Icon: Gauge,
-      val: current ? `${Math.round(current.pressure_hpa)} mb` : "--",
-      label: "Pressure",
-    },
-    {
-      Icon: Thermometer,
-      val: current ? `UV ${Math.round(current.uv_index)}` : "--",
-      label: "UV Index",
-    },
-    {
-      Icon: Eye,
-      val: visibilityMiles == null ? "--" : `${visibilityMiles} mi`,
-      label: "Visibility",
-    },
-  ];
+  const stats: { Icon: ElementType; val: string; label: string }[] =
+    usingSelectedForecast
+      ? [
+          {
+            Icon: Droplets,
+            val: `${Math.round(selectedForecast.precipitation_probability_percent)}%`,
+            label: "Precip Chance",
+          },
+          {
+            Icon: Wind,
+            val: `${selectedForecast.precipitation_inches.toFixed(2)} in`,
+            label: "Precip",
+          },
+          {
+            Icon: Gauge,
+            val: `${Math.round(selectedForecast.uv_index_max)}`,
+            label: "UV Max",
+          },
+          {
+            Icon: Thermometer,
+            val: `${Math.round(selectedForecast.high_temperature_f)}°`,
+            label: "High",
+          },
+          {
+            Icon: Eye,
+            val: `${Math.round(selectedForecast.low_temperature_f)}°`,
+            label: "Low",
+          },
+        ]
+      : [
+          {
+            Icon: Droplets,
+            val: current ? `${Math.round(current.humidity_percent)}%` : "--",
+            label: "Humidity",
+          },
+          {
+            Icon: Wind,
+            val: current ? `${Math.round(current.wind_speed_mph)} mph` : "--",
+            label: "Wind",
+          },
+          {
+            Icon: Gauge,
+            val: current ? `${Math.round(current.pressure_hpa)} mb` : "--",
+            label: "Pressure",
+          },
+          {
+            Icon: Thermometer,
+            val: current ? `UV ${Math.round(current.uv_index)}` : "--",
+            label: "UV Index",
+          },
+          {
+            Icon: Eye,
+            val: visibilityMiles == null ? "--" : `${visibilityMiles} mi`,
+            label: "Visibility",
+          },
+        ];
 
   return (
     <div style={{ background: C.card, border: `0.0625rem solid ${C.border}`,
@@ -59,7 +144,7 @@ export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boo
           <Sun size={13} color={C.sage} />
           <span style={{ fontSize: "0.68rem", fontWeight: 800, color: C.sage,
             textTransform: "uppercase", letterSpacing: "0.06em", ...mono }}>
-            Today
+            {headerLabel(selectedDate)}
           </span>
         </div>
       </div>
@@ -71,7 +156,11 @@ export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boo
           <div>
             <span style={{ fontSize: "2rem", fontWeight: 800,
               color: C.brown, lineHeight: 1 }}>
-              {current ? `${Math.round(current.temperature_f)}°` : "--°"}
+              {selectedForecast
+                ? `${Math.round(selectedForecast.high_temperature_f)}°`
+                : current
+                  ? `${Math.round(current.temperature_f)}°`
+                  : "--°"}
             </span>
             <span style={{ fontSize: "0.65rem", color: C.brownLight,
               display: "block", marginTop: "0.125rem" }}>
@@ -83,8 +172,10 @@ export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boo
         <div style={{ fontSize: "0.65rem", color: C.muted, marginBottom: "0.75rem" }}>
           {weatherError
             ? weatherError
-            : current
-              ? `Feels like ${Math.round(current.feels_like_f)}°F`
+            : selectedForecast
+              ? `Low ${Math.round(selectedForecast.low_temperature_f)}°F`
+              : current
+                ? `Feels like ${Math.round(current.feels_like_f)}°F`
               : "Weather unavailable"}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>

@@ -1,20 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { fetchWeather, type WeatherResponse } from "@/api/weather";
 import { useAuth } from "../auth/AuthContext";
-import { usePlots } from "./usePlots";
 
-export function useWeather() {
+export function useWeather(gardenId?: number | null) {
   const { accessToken } = useAuth();
-  const { plots, plotsLoading, plotsError } = usePlots();
 
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(true);
   const [weatherError, setWeatherError] = useState<string | null>(null);
 
-  const gardenId = useMemo(() => {
-    const myPlot = plots.find((plot) => plot.is_mine && plot.is_active);
-    return myPlot?.garden ?? plots[0]?.garden ?? null;
-  }, [plots]);
+  const resolvedGardenId = useMemo(
+    () => gardenId ?? null,
+    [gardenId],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -30,23 +28,7 @@ export function useWeather() {
         return;
       }
 
-      if (plotsLoading) {
-        if (!cancelled) {
-          setWeatherLoading(true);
-        }
-        return;
-      }
-
-      if (plotsError) {
-        if (!cancelled) {
-          setWeather(null);
-          setWeatherError(plotsError);
-          setWeatherLoading(false);
-        }
-        return;
-      }
-
-      if (!gardenId) {
+      if (!resolvedGardenId) {
         if (!cancelled) {
           setWeather(null);
           setWeatherError("No garden is available for weather lookup.");
@@ -61,7 +43,7 @@ export function useWeather() {
           setWeatherError(null);
         }
 
-        const data = await fetchWeather(accessToken, gardenId, controller.signal);
+        const data = await fetchWeather(accessToken, resolvedGardenId, controller.signal);
 
         if (!cancelled) {
           setWeather(data);
@@ -88,7 +70,7 @@ export function useWeather() {
       cancelled = true;
       controller.abort();
     };
-  }, [accessToken, gardenId, plotsLoading, plotsError]);
+  }, [accessToken, resolvedGardenId]);
 
   return {
     weather,
