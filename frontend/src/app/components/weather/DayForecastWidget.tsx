@@ -1,20 +1,156 @@
 import { type ElementType } from "react";
-import { Sun, Droplets, Wind, Gauge, Thermometer, Eye, ArrowRight } from "lucide-react";
+import { Sun, Droplets, Wind, Gauge, Thermometer, Leaf, ArrowRight } from "lucide-react";
 import { C, mono } from "../../theme";
-import { weekWeather, todayDetail } from "./weatherData";
+import type { WeatherResponse } from "@/api/weather";
 import { WeatherIcon } from "./WeatherIcon";
+import { weatherCodeToIconType } from "./weatherCode";
 
-export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boolean }) {
-  const today = weekWeather[0];
-  const d     = todayDetail;
+type DayForecastWidgetProps = {
+  weather: WeatherResponse | null;
+  weatherLoading: boolean;
+  weatherError: string | null;
+  selectedDate?: string | null;
+  showWeekLink?: boolean;
+};
 
-  const stats: { Icon: ElementType; val: string; label: string }[] = [
-    { Icon: Droplets,    val: `${d.humidity}%`,    label: "Humidity" },
-    { Icon: Wind,        val: `${d.wind} mph`,      label: "Wind" },
-    { Icon: Gauge,       val: `${d.pressure} mb`,   label: "Pressure" },
-    { Icon: Thermometer, val: `UV ${d.uvIndex}`,    label: "UV Index" },
-    { Icon: Eye,         val: `${d.visibility} mi`, label: "Visibility" },
-  ];
+function formatDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function headerLabel(selectedDate?: string | null) {
+  const toUpperDay = (dateKey: string) => {
+    const parsed = new Date(`${dateKey}T12:00:00`);
+    return parsed.toLocaleDateString(undefined, { weekday: "long" }).toUpperCase();
+  };
+
+  if (!selectedDate) {
+    return "TODAY";
+  }
+
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(today.getDate() + 1);
+
+  if (selectedDate === formatDateKey(today)) {
+    return "TODAY";
+  }
+
+  if (selectedDate === formatDateKey(tomorrow)) {
+    return `TOMORROW, ${toUpperDay(selectedDate)}`;
+  }
+
+  return toUpperDay(selectedDate);
+}
+
+export function DayForecastWidget({
+  weather,
+  weatherLoading,
+  weatherError,
+  selectedDate,
+  showWeekLink = false,
+}: DayForecastWidgetProps) {
+
+  const selectedForecast =
+    selectedDate == null
+      ? null
+      : weather?.forecast.find((day) => day.date === selectedDate) ?? null;
+
+  const current = weather?.current;
+  const usingSelectedForecast = selectedForecast != null;
+  const todayKey = formatDateKey(new Date());
+  const isSelectedCurrentDay = selectedForecast?.date === todayKey;
+  const hasAirQualityForecast = Array.isArray(weather?.air_quality?.forecast);
+  const dailyAirQuality = selectedForecast
+    ? weather?.air_quality.forecast.find((aqi) => aqi.date === selectedForecast.date)
+    : null;
+
+  const iconType = weatherCodeToIconType(
+    selectedForecast?.weather_code ?? current?.weather_code,
+  );
+
+  const description =
+    selectedForecast?.weather_description
+    ?? current?.weather_description
+    ?? "Weather unavailable";
+
+  function getForecastAirQualityValue() {
+    if (weatherError || !hasAirQualityForecast) {
+      return "Unavailable";
+    }
+    if (dailyAirQuality?.us_aqi_average == null) {
+      return isSelectedCurrentDay ? "Unavailable" : "No forecast";
+    }
+    return `${dailyAirQuality.us_aqi_average} ${dailyAirQuality.label}`;
+  }
+
+  function getCurrentAirQualityValue() {
+    if (weather?.air_quality.current.us_aqi == null) {
+      return weather?.air_quality.current.label ?? "Unavailable";
+    }
+    return `${weather.air_quality.current.us_aqi} ${weather.air_quality.current.label}`;
+  }
+
+  const stats: { Icon: ElementType; val: string; label: string }[] =
+    usingSelectedForecast
+      ? [
+          {
+            Icon: Droplets,
+            val: current ? `${Math.round(current.humidity_percent)}%` : "--",
+            label: "Humidity",
+          },
+          {
+            Icon: Wind,
+            val: current ? `${Math.round(current.wind_speed_mph)} mph` : "--",
+            label: "Wind",
+          },
+          {
+            Icon: Gauge,
+            val: `${Math.round(selectedForecast.precipitation_probability_percent)}%`,
+            label: "Chance of Rain",
+          },
+          {
+            Icon: Thermometer,
+            val: `UV ${Math.round(selectedForecast.uv_index_max)}`,
+            label: "UV Index",
+          },
+          {
+            Icon: Leaf,
+            val: getForecastAirQualityValue(),
+            label: "Air Quality",
+          },
+        ]
+      : [
+          {
+            Icon: Droplets,
+            val: current ? `${Math.round(current.humidity_percent)}%` : "--",
+            label: "Humidity",
+          },
+          {
+            Icon: Wind,
+            val: current ? `${Math.round(current.wind_speed_mph)} mph` : "--",
+            label: "Wind",
+          },
+          {
+            Icon: Gauge,
+            val: current
+              ? `${Math.round(current.precipitation_probability_percent)}%`
+              : "--",
+            label: "Chance of Rain",
+          },
+          {
+            Icon: Thermometer,
+            val: current ? `UV ${Math.round(current.uv_index)}` : "--",
+            label: "UV Index",
+          },
+          {
+            Icon: Leaf,
+            val: getCurrentAirQualityValue(),
+            label: "Air Quality",
+          },
+        ];
 
   return (
     <div style={{ background: C.card, border: `0.0625rem solid ${C.border}`,
@@ -28,7 +164,7 @@ export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boo
           <Sun size={13} color={C.sage} />
           <span style={{ fontSize: "0.68rem", fontWeight: 800, color: C.sage,
             textTransform: "uppercase", letterSpacing: "0.06em", ...mono }}>
-            Today
+            {headerLabel(selectedDate)}
           </span>
         </div>
       </div>
@@ -39,14 +175,28 @@ export function DayForecastWidget({ showWeekLink = false }: { showWeekLink?: boo
           gap: "0.75rem", marginBottom: "0.25rem" }}>
           <div>
             <span style={{ fontSize: "2rem", fontWeight: 800,
-              color: C.brown, lineHeight: 1 }}>{today.hi}°</span>
+              color: C.brown, lineHeight: 1 }}>
+              {selectedForecast
+                ? `${Math.round(selectedForecast.high_temperature_f)}°`
+                : current
+                  ? `${Math.round(current.temperature_f)}°`
+                  : "--°"}
+            </span>
             <span style={{ fontSize: "0.65rem", color: C.brownLight,
-              display: "block", marginTop: "0.125rem" }}>{today.desc}</span>
+              display: "block", marginTop: "0.125rem" }}>
+              {weatherLoading ? "Loading weather..." : description}
+            </span>
           </div>
-          <WeatherIcon type={today.icon} size={54} />
+          <WeatherIcon type={iconType} size={54} />
         </div>
         <div style={{ fontSize: "0.65rem", color: C.muted, marginBottom: "0.75rem" }}>
-          Feels like {d.feelsLike}°F
+          {weatherError
+            ? weatherError
+            : selectedForecast
+              ? `Low ${Math.round(selectedForecast.low_temperature_f)}°F`
+              : current
+                ? `Feels like ${Math.round(current.feels_like_f)}°F`
+              : "Weather unavailable"}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
           {stats.map(({ Icon, val, label }) => (

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { ClipboardList, Newspaper } from "lucide-react";
 import { C, serif, sans, mono } from "../theme";
 import type { Screen } from "../types";
@@ -8,6 +9,7 @@ import type { PlotInfo } from "../components/plot/types";
 import dashboardIcon from "../../imports/DashboardHouseIcon.jpg";
 import { useAuth } from "../auth/AuthContext";
 import { usePlots } from "../hooks/usePlots";
+import { useWeather } from "../hooks/useWeather";
 
 
 const newsFeed = [
@@ -39,6 +41,16 @@ export function DashboardScreen({
 }) {
   const { isApproved } = useAuth();
   const { plots, plotsLoading, plotsError } = usePlots();
+  const weatherGardenId =
+    plots.find((plot) => plot.is_mine && plot.is_active)?.garden ??
+    plots[0]?.garden ??
+    null;
+  const { weather, weatherLoading, weatherError } = useWeather(weatherGardenId);
+  const [selectedForecastDate, setSelectedForecastDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedForecastDate(null);
+  }, [weatherGardenId]);
 
   const plotData: PlotInfo[] = plots
     .map((plot) => {
@@ -263,8 +275,19 @@ export function DashboardScreen({
               gap: "0.625rem",
             }}
           >
-            <DayForecastWidget />
-            <WeekWeatherWidget />
+            <DayForecastWidget
+              weather={weather}
+              weatherLoading={weatherLoading}
+              weatherError={weatherError}
+              selectedDate={selectedForecastDate}
+            />
+            <WeekWeatherWidget
+              weather={weather}
+              weatherLoading={weatherLoading}
+              weatherError={weatherError}
+              selectedDate={selectedForecastDate}
+              onSelectDate={setSelectedForecastDate}
+            />
           </div>
 
           {/* Task board — approved members only */}
