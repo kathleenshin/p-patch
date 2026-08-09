@@ -9,10 +9,10 @@ class PlotModelTests(BasePlotTestCase):
     def test_create_plot(self):
         plot = Plot.objects.create(
             garden=self.garden,
-            plot_number="2",
+            plot_number="3",
         )
 
-        self.assertEqual(plot.plot_number, "2")
+        self.assertEqual(plot.plot_number, "3")
         self.assertEqual(plot.garden, self.garden)
 
     def test_plot_number_unique_within_garden(self):
