@@ -26,6 +26,7 @@ from .throttles import (
     AuthResendIPThrottle,
 )
 from .tokens import email_change_token, email_confirmation_token
+from notifications.services.email_provider import EmailDeliveryError
 
 
 class UserListView(generics.ListAPIView):
@@ -232,7 +233,16 @@ class ChangeEmailView(APIView):
 
         user.pending_email = new_email
         user.save(update_fields=["pending_email"])
-        send_email_change_confirmation(user)
+        try:
+            send_email_change_confirmation(user)
+        except EmailDeliveryError as exc:
+            # Don't leave a pending change if the confirmation never left.
+            user.pending_email = None
+            user.save(update_fields=["pending_email"])
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         return Response(
             {
                 "detail": (

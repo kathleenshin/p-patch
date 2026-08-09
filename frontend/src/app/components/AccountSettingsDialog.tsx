@@ -17,6 +17,25 @@ function displayName(
   return full || email;
 }
 
+/** Prefer a short SES sandbox hint over the raw AWS dump when possible. */
+function formatAccountError(err: unknown, fallback: string): string {
+  const raw =
+    err instanceof ApiError
+      ? err.message
+      : err instanceof Error
+        ? err.message
+        : fallback;
+  if (/not verified/i.test(raw)) {
+    return (
+      "SES could not send: an address is not verified in this AWS region. " +
+      "In SES sandbox, verify both the From address and the new email (recipient), " +
+      "or request production access. Full detail: " +
+      raw
+    );
+  }
+  return raw;
+}
+
 const sectionTitle: CSSProperties = {
   ...serif,
   fontSize: "1rem",
@@ -54,6 +73,28 @@ const secondaryBtn: CSSProperties = {
   fontWeight: 700,
   fontSize: "0.85rem",
   cursor: "pointer",
+};
+
+const successBanner: CSSProperties = {
+  background: C.sagePop,
+  border: `0.0938rem solid ${C.sageMid}`,
+  borderRadius: "0.75rem",
+  padding: "0.625rem 0.75rem",
+  color: C.sageDark,
+  fontSize: "0.85rem",
+  fontWeight: 700,
+  lineHeight: 1.35,
+};
+
+const errorBanner: CSSProperties = {
+  background: C.terraLight,
+  border: `0.0938rem solid ${C.terra}`,
+  borderRadius: "0.75rem",
+  padding: "0.625rem 0.75rem",
+  color: C.terraDark,
+  fontSize: "0.85rem",
+  fontWeight: 700,
+  lineHeight: 1.35,
 };
 
 /**
@@ -117,19 +158,13 @@ export function AccountSettingsDialog({ open, onClose }: AccountSettingsDialogPr
     }
     setPasswordLoading(true);
     try {
-      const detail = await changePassword(currentPassword, newPassword);
-      setPasswordMsg(detail);
+      await changePassword(currentPassword, newPassword);
+      setPasswordMsg("Done! Your password has been updated.");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err) {
-      setPasswordError(
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : "Could not update password.",
-      );
+      setPasswordError(formatAccountError(err, "Could not update password."));
     } finally {
       setPasswordLoading(false);
     }
@@ -141,18 +176,14 @@ export function AccountSettingsDialog({ open, onClose }: AccountSettingsDialogPr
     setEmailError(null);
     setEmailLoading(true);
     try {
-      const detail = await changeEmail(newEmail.trim(), emailPassword);
-      setEmailMsg(detail);
+      await changeEmail(newEmail.trim(), emailPassword);
+      setEmailMsg(
+        "Sent! Check the new address for a confirmation link. Your current email stays active until you confirm.",
+      );
       setNewEmail("");
       setEmailPassword("");
     } catch (err) {
-      setEmailError(
-        err instanceof ApiError
-          ? err.message
-          : err instanceof Error
-            ? err.message
-            : "Could not start email change.",
-      );
+      setEmailError(formatAccountError(err, "Could not start email change."));
     } finally {
       setEmailLoading(false);
     }
@@ -161,7 +192,11 @@ export function AccountSettingsDialog({ open, onClose }: AccountSettingsDialogPr
   return (
     <div
       role="presentation"
-      onClick={onClose}
+      // Close only if the press started on the backdrop (not a click that
+      // started on the button and finished outside after the layout shifted).
+      onPointerDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       style={{
         position: "fixed",
         inset: 0,
@@ -177,7 +212,7 @@ export function AccountSettingsDialog({ open, onClose }: AccountSettingsDialogPr
         role="dialog"
         aria-modal="true"
         aria-labelledby="account-settings-title"
-        onClick={(e) => e.stopPropagation()}
+        onPointerDown={(e) => e.stopPropagation()}
         style={{
           ...sans,
           width: "100%",
@@ -270,7 +305,10 @@ export function AccountSettingsDialog({ open, onClose }: AccountSettingsDialogPr
                 type="password"
                 autoComplete="current-password"
                 value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
+                onChange={(e) => {
+                  setCurrentPassword(e.target.value);
+                  setPasswordMsg(null);
+                }}
                 required
                 style={inputStyle}
               />
@@ -284,7 +322,10 @@ export function AccountSettingsDialog({ open, onClose }: AccountSettingsDialogPr
                 type="password"
                 autoComplete="new-password"
                 value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
+                onChange={(e) => {
+                  setNewPassword(e.target.value);
+                  setPasswordMsg(null);
+                }}
                 required
                 minLength={8}
                 style={inputStyle}
@@ -299,20 +340,23 @@ export function AccountSettingsDialog({ open, onClose }: AccountSettingsDialogPr
                 type="password"
                 autoComplete="new-password"
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setPasswordMsg(null);
+                }}
                 required
                 minLength={8}
                 style={inputStyle}
               />
             </div>
             {passwordError ? (
-              <p style={{ color: C.terra, fontSize: "0.8rem", margin: 0 }}>{passwordError}</p>
+              <p role="alert" style={{ ...errorBanner, margin: 0 }}>{passwordError}</p>
             ) : null}
             {passwordMsg ? (
-              <p style={{ color: C.sageDark, fontSize: "0.8rem", margin: 0 }}>{passwordMsg}</p>
+              <p role="status" style={{ ...successBanner, margin: 0 }}>{passwordMsg}</p>
             ) : null}
             <button type="submit" disabled={passwordLoading} style={primaryBtn}>
-              {passwordLoading ? "Updating…" : "Update password"}
+              {passwordLoading ? "Updating…" : passwordMsg ? "Done!" : "Update password"}
             </button>
           </form>
         </section>
@@ -353,13 +397,13 @@ export function AccountSettingsDialog({ open, onClose }: AccountSettingsDialogPr
               />
             </div>
             {emailError ? (
-              <p style={{ color: C.terra, fontSize: "0.8rem", margin: 0 }}>{emailError}</p>
+              <p role="alert" style={{ ...errorBanner, margin: 0 }}>{emailError}</p>
             ) : null}
             {emailMsg ? (
-              <p style={{ color: C.sageDark, fontSize: "0.8rem", margin: 0 }}>{emailMsg}</p>
+              <p role="status" style={{ ...successBanner, margin: 0 }}>{emailMsg}</p>
             ) : null}
             <button type="submit" disabled={emailLoading} style={primaryBtn}>
-              {emailLoading ? "Sending…" : "Send confirmation"}
+              {emailLoading ? "Sending…" : emailMsg ? "Sent!" : "Send confirmation"}
             </button>
           </form>
         </section>
