@@ -85,6 +85,7 @@ export function PlotScreen({
   );
 
   // Prefer the newest uploaded photo for the hero; fall back to bundled art.
+  // Gallery of older photos is disabled for now — only the latest is kept in state.
   const heroPhotoSrc = photos[0]?.image_url || plotPhoto;
 
   useEffect(() => {
@@ -101,7 +102,8 @@ export function PlotScreen({
         setPhotoError(null);
         const data = await fetchPlotPhotos(focusPlot.id, accessToken);
         if (!ignore) {
-          setPhotos(data);
+          // Keep only the newest photo for the Overview hero (skip older history).
+          setPhotos(data[0] ? [data[0]] : []);
         }
       } catch (error) {
         if (!ignore) {
@@ -160,8 +162,9 @@ export function PlotScreen({
         file,
         accessToken,
       );
-      setPhotos((current) => [uploaded, ...current]);
-      setActiveTab("gallery");
+      // Replace hero with this upload only (do not keep older photos in UI state).
+      setPhotos([uploaded]);
+      setActiveTab("overview");
       closeCropModal();
     } catch (error) {
       setPhotoError(
@@ -202,7 +205,8 @@ export function PlotScreen({
   const tabs: { key: typeof activeTab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "notes", label: "Notes" },
-    { key: "gallery", label: "Gallery" },
+    // Gallery disabled: older uploads were view-only with no select/delete actions.
+    // { key: "gallery", label: "Gallery" },
     { key: "history", label: "History" },
   ];
 
@@ -548,7 +552,7 @@ export function PlotScreen({
               ))}
             </div>
 
-            {/* Gallery tab: remote photos from local media or S3 */}
+            {/* Gallery tab disabled — older photos had no actions beyond viewing.
             {activeTab === "gallery" ? (
               <div
                 style={{
@@ -606,6 +610,7 @@ export function PlotScreen({
                 )}
               </div>
             ) : null}
+            */}
 
             {/* Plot Info + Notes */}
             {activeTab === "overview" || activeTab === "notes" ? (
