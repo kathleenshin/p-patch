@@ -69,6 +69,8 @@ export interface PlotInfo {
   plotNumber: string;
   state: PlotState;
   needsHelp: boolean;
+  isMine: boolean;
+  isOccupied: boolean;
   owner?: string;
   since?: string;
 }

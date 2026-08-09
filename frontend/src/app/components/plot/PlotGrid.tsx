@@ -28,6 +28,15 @@ export function PlotGrid({
     if (key === "all") {
       return true;
     }
+    if (key === "available") {
+      return !plot.isOccupied;
+    }
+    if (key === "active") {
+      return plot.isOccupied && !plot.isMine;
+    }
+    if (key === "mine") {
+      return plot.isMine;
+    }
     if (key === "help-needed") {
       return plot.needsHelp;
     }

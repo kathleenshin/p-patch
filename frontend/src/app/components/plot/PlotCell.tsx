@@ -20,9 +20,8 @@ export function PlotCell({
   const [pos, setPos] = useState({ x: 0, y: 0 });
 
   const col = plotColors[plot.state];
-  const isMine = plot.state === "mine";
-
-  const isEmptyState = plot.state === "available";
+  const isMine = plot.isMine;
+  const isEmptyState = !plot.isOccupied;
 
   return (
     <>
@@ -106,7 +105,7 @@ export function PlotCell({
             height: "2.5rem",
           }}
         >
-          {(plot.state === "active" || plot.state === "mine" || plot.state === "help-done") && (
+          {plot.isOccupied && (
             <PlantIcon size={36} />
           )}
 

@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { ClipboardList, Newspaper } from "lucide-react";
 import { C, serif, sans, mono } from "../theme";
 import type { Screen } from "../types";
@@ -9,7 +8,6 @@ import type { PlotInfo } from "../components/plot/types";
 import dashboardIcon from "../../imports/DashboardHouseIcon.jpg";
 import { useAuth } from "../auth/AuthContext";
 import { usePlots } from "../hooks/usePlots";
-import { fetchHelpRequests, type HelpRequest } from "../../lib/helpRequestsApi";
 
 
 const newsFeed = [
@@ -39,92 +37,36 @@ export function DashboardScreen({
   setScreen: (s: Screen) => void;
   setSelectedPlotId: (plotId: number) => void;
 }) {
-  const { isApproved, accessToken } = useAuth();
+  const { isApproved } = useAuth();
   const { plots, plotsLoading, plotsError } = usePlots();
-  const [helpRequests, setHelpRequests] = useState<HelpRequest[]>([]);
-
-  useEffect(() => {
-    let ignore = false;
-
-    if (!accessToken) {
-      setHelpRequests([]);
-      return () => {
-        ignore = true;
-      };
-    }
-
-    async function loadHelpRequests() {
-      try {
-        const data = await fetchHelpRequests(accessToken);
-        if (!ignore) {
-          setHelpRequests(data);
-        }
-      } catch {
-        if (!ignore) {
-          setHelpRequests([]);
-        }
-      }
-    }
-
-    void loadHelpRequests();
-
-    return () => {
-      ignore = true;
-    };
-  }, [accessToken]);
-
-  const helpStatusByPlotId = new Map<number, "active" | "pending" | "done">();
-  const statusRank: Record<"active" | "pending" | "done", number> = {
-    active: 3,
-    pending: 2,
-    done: 1,
-  };
-
-  for (const request of helpRequests) {
-    if (!request.plot) {
-      continue;
-    }
-
-    const requestStatus =
-      request.status === "active" || request.status === "pending" || request.status === "done"
-        ? request.status
-        : null;
-
-    if (!requestStatus) {
-      continue;
-    }
-
-    const existingStatus = helpStatusByPlotId.get(request.plot);
-    if (!existingStatus || statusRank[requestStatus] > statusRank[existingStatus]) {
-      helpStatusByPlotId.set(request.plot, requestStatus);
-    }
-  }
 
   const plotData: PlotInfo[] = plots
     .map((plot) => {
       const primaryOwner =
         plot.owners.find((owner) => owner.is_primary) ??
         plot.owners[0];
-      const helpStatus = helpStatusByPlotId.get(plot.id);
+      const helpStatus = plot.help_status;
       const needsHelp = helpStatus === "active" || helpStatus === "pending";
+      const isMine = plot.is_mine;
+      const isOccupied = plot.owners.length > 0;
 
       return {
         id: plot.id,
         plotNumber: plot.plot_number,
         needsHelp,
+        isMine,
+        isOccupied,
         owner: primaryOwner?.name,
         since: primaryOwner?.start_date ?? undefined,
         state: helpStatus === "active"
           ? "help-active"
           : helpStatus === "pending"
             ? "help-pending"
-            : helpStatus === "done"
-              ? "help-done"
-              : plot.is_mine
-                ? "mine"
-                : plot.owners.length === 0
-                  ? "available"
-                  : "active",
+            : isMine
+              ? "mine"
+              : !isOccupied
+                ? "available"
+                : "active",
       };
     });
 

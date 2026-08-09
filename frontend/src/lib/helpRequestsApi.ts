@@ -36,7 +36,6 @@ export async function createHelpRequest(accessToken: string, payload: {
   assigned_to: number | null;
   garden: number;
   plot?: number | null;
-  plot_number?: string;
 }): Promise<HelpRequest> {
   return apiFetch<HelpRequest>('/api/help-requests/', {
     method: 'POST',
@@ -48,7 +47,7 @@ export async function createHelpRequest(accessToken: string, payload: {
 export async function updateHelpRequest(
   accessToken: string,
   id: number,
-  payload: Partial<HelpRequest> & { status?: string; plot_number?: string },
+  payload: Partial<HelpRequest> & { status?: string },
 ): Promise<HelpRequest> {
   return apiFetch<HelpRequest>(`/api/help-requests/${id}/`, {
     method: 'PATCH',

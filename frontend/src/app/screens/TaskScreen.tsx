@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Plus, X } from "lucide-react";
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import { useAuth } from "../auth/AuthContext";
-import { usePlots } from "../hooks/usePlots";
+import { invalidatePlotsCache, usePlots } from "../hooks/usePlots";
 import taskIcon from "../../imports/TaskPageIcon.jpg";
 import {
   createHelpRequest,
@@ -143,7 +143,6 @@ export function TaskScreen() {
     .map((plot) => ({
       value: `${plot.id}`,
       gardenId: plot.garden,
-      plotNumber: plot.plot_number,
       label: `Plot #${plot.plot_number} (${plot.garden_name})`,
     }));
 
@@ -167,15 +166,16 @@ export function TaskScreen() {
 
     try {
       const selectedPlot = getSelectedPlotOption(plotSelection);
-
-      const fallbackGardenId = plots[0]?.garden ?? 1;
-      const gardenId = selectedPlot?.gardenId ?? fallbackGardenId;
+      if (!selectedPlot) {
+        setError("Select a plot to create a help request.");
+        return;
+      }
 
       const data = await createHelpRequest(accessToken, {
         title,
         description,
-        garden: gardenId,
-        plot_number: selectedPlot?.plotNumber ?? "",
+        garden: selectedPlot.gardenId,
+        plot: Number(selectedPlot.value),
         priority,
         category,
         due_date: dueDate || null,
@@ -183,6 +183,7 @@ export function TaskScreen() {
       });
 
       setRequests((current) => [data, ...current]);
+      invalidatePlotsCache();
       setTitle("");
       setDescription("");
       setPriority("medium");
@@ -212,6 +213,7 @@ export function TaskScreen() {
     try {
       const data = await updateHelpRequest(accessToken, requestId, { status: nextStatus });
       setRequests((current) => current.map((request) => (request.id === requestId ? data : request)));
+      invalidatePlotsCache();
       setSuccess("Help request updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update the help request.");
@@ -233,6 +235,7 @@ export function TaskScreen() {
     try {
       await deleteHelpRequest(accessToken, requestId);
       setRequests((current) => current.filter((request) => request.id !== requestId));
+      invalidatePlotsCache();
       setSuccess("Help request deleted.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete the help request.");
@@ -271,20 +274,40 @@ export function TaskScreen() {
 
     try {
       const selectedPlot = getSelectedPlotOption(editPlotSelection);
+      const originalPlotSelection = selectedRequest.plot
+        ? String(selectedRequest.plot)
+        : "";
+      const plotSelectionChanged = editPlotSelection !== originalPlotSelection;
 
-      const data = await updateHelpRequest(accessToken, selectedRequest.id, {
+      if (plotSelectionChanged && editPlotSelection !== "" && !selectedPlot) {
+        setError("Selected plot is no longer available. Please reselect a plot.");
+        return;
+      }
+
+      const payload: Partial<HelpRequest> & { status?: string } = {
         title: editTitle,
         description: editDescription,
         status: editStatus,
         priority: editPriority,
         category: editCategory,
-        garden: selectedPlot?.gardenId ?? selectedRequest.garden,
         due_date: editDueDate || null,
         assigned_to: editAssignee || null,
-        plot_number: selectedPlot?.plotNumber ?? "",
-      });
+      };
+
+      if (plotSelectionChanged) {
+        if (editPlotSelection === "") {
+          // Only clear the plot when user explicitly picks "No plot".
+          payload.plot = null;
+        } else if (selectedPlot) {
+          payload.plot = Number(selectedPlot.value);
+          payload.garden = selectedPlot.gardenId;
+        }
+      }
+
+      const data = await updateHelpRequest(accessToken, selectedRequest.id, payload);
 
       setRequests((current) => current.map((request) => (request.id === selectedRequest.id ? data : request)));
+      invalidatePlotsCache();
       setSelectedRequest(null);
       setSuccess("Help request updated.");
       void loadRequests();

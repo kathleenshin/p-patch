@@ -8,10 +8,26 @@ type SharedFetch = {
   promise: Promise<PlotRecord[]>;
 };
 
+type CacheListener = () => void;
+
 let cacheToken: string | null = null;
 let cachePlots: PlotRecord[] | null = null;
 let cacheError: string | null = null;
 let sharedFetch: SharedFetch | null = null;
+const cacheListeners = new Set<CacheListener>();
+
+export function invalidatePlotsCache() {
+  if (sharedFetch) {
+    sharedFetch.controller.abort();
+    sharedFetch = null;
+  }
+
+  cacheToken = null;
+  cachePlots = null;
+  cacheError = null;
+
+  cacheListeners.forEach((listener) => listener());
+}
 
 export function usePlots() {
   const { accessToken } = useAuth();
@@ -19,6 +35,18 @@ export function usePlots() {
   const [plots, setPlots] = useState<PlotRecord[]>([]);
   const [plotsLoading, setPlotsLoading] = useState(true);
   const [plotsError, setPlotsError] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  useEffect(() => {
+    const handleCacheInvalidated = () => {
+      setRefreshTick((tick) => tick + 1);
+    };
+
+    cacheListeners.add(handleCacheInvalidated);
+    return () => {
+      cacheListeners.delete(handleCacheInvalidated);
+    };
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -113,7 +141,7 @@ export function usePlots() {
     return () => {
       ignore = true;
     };
-  }, [accessToken]);
+  }, [accessToken, refreshTick]);
 
   return {
     plots,

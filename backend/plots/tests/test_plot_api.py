@@ -136,6 +136,7 @@ class PlotAPITests(BasePlotAPITestCase):
         payload = response.json()
 
         self.assertTrue(payload["has_open_help_request"])
+        self.assertEqual(payload["help_status"], HelpRequest.Status.ACTIVE)
         self.assertTrue(payload["is_mine"])
         self.assertEqual(len(payload["owners"]), 1)
         self.assertEqual(
@@ -203,3 +204,51 @@ class PlotAPITests(BasePlotAPITestCase):
             len(expanded_ctx),
             baseline_count + 3,
         )
+
+    def test_plot_help_status_ignores_done_requests(self):
+        self.user_one.is_approved = True
+        self.user_one.save(update_fields=["is_approved"])
+
+        HelpRequest.objects.create(
+            title="Completed request",
+            description="Already done.",
+            status=HelpRequest.Status.DONE,
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user_one,
+        )
+
+        response = self.client.get(self.plot_detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertFalse(payload["has_open_help_request"])
+        self.assertIsNone(payload["help_status"])
+
+    def test_plot_help_status_prefers_active_over_pending(self):
+        self.user_one.is_approved = True
+        self.user_one.save(update_fields=["is_approved"])
+
+        HelpRequest.objects.create(
+            title="Pending request",
+            description="Waiting for someone.",
+            status=HelpRequest.Status.PENDING,
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user_one,
+        )
+        HelpRequest.objects.create(
+            title="Active request",
+            description="Open and active.",
+            status=HelpRequest.Status.ACTIVE,
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user_one,
+        )
+
+        response = self.client.get(self.plot_detail_url)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["has_open_help_request"])
+        self.assertEqual(payload["help_status"], HelpRequest.Status.ACTIVE)
