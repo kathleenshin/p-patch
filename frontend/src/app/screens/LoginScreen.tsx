@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import { C, serif, sans, mono, inputStyle, linkStyle, labelStyle } from "../theme";
 import { gardenFacts } from "../data/gardenFacts";
-import { DoodleLeaf } from "../components/DoodleLeaf";
 import gardenPhoto from "../../imports/gardening_plots_growing_veggies_vivid.jpg";
 import { useAuth, ApiError } from "../auth/AuthContext";
 
@@ -33,6 +32,7 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState(0);
 
+  // Tick the resend cooldown down once per second.
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const id = window.setTimeout(() => setResendCooldown((s) => s - 1), 1000);
@@ -80,6 +80,7 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
     };
   }, [confirmEmail, onLogin]);
 
+  // Start the 60s wait before another confirmation email can be sent.
   function startResendCooldown() {
     setResendCooldown(RESEND_COOLDOWN_SECONDS);
   }
@@ -122,6 +123,7 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
     }
   }
 
+  // Re-send the confirmation email for the pending address.
   async function handleResend() {
     if (!pendingEmail || resendCooldown > 0) return;
     setError(null);
@@ -149,14 +151,23 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
     <div className="login-shell" style={{ ...sans }}>
       {/* Left: garden photo + brand / fact overlay */}
       <div className="login-hero">
+        {/* Full-bleed garden background */}
         <img
           src={gardenPhoto}
           alt="Community garden raised beds with tomatoes, lettuce, and cabbage"
         />
         <div style={{ position: "absolute", bottom: "8%", left: "6%", right: "6%" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", marginBottom: "1rem" }}>
-            <DoodleLeaf size={34} color={C.white} />
-            <span style={{ ...serif, color: C.white, fontWeight: 700, fontSize: "1.4rem" }}>
+          {/* Site name over the photo (Lora + thin outline for contrast) */}
+          <div style={{ marginBottom: "1rem" }}>
+            <span style={{
+              ...serif,
+              color: C.white,
+              fontWeight: 700,
+              fontSize: "2rem",
+              WebkitTextStroke: "0.5px rgba(47, 70, 51, 0.55)",
+              paintOrder: "stroke fill",
+              textShadow: "0 1px 2px rgba(0, 0, 0, 0.35)",
+            }}>
               Judkins Park P-Patch
             </span>
           </div>
@@ -182,13 +193,8 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
         flexDirection: "column", alignItems: "stretch", justifyContent: "center",
         boxSizing: "border-box" }}>
         <div className="login-form-content">
-          {/* Heading */}
+          {/* Welcome heading */}
           <div style={{ textAlign: "center", marginBottom: "1.75rem" }}>
-            <div style={{ width: "5rem", height: "3.5rem", borderRadius: "1.125rem", background: C.sageLight,
-              display: "flex", alignItems: "center", justifyContent: "center",
-              margin: "0 auto 0.75rem" }}>
-              <DoodleLeaf size={34} />
-            </div>
             <h1 style={{ ...serif, fontSize: "1.5rem", fontWeight: 700, color: C.brown, margin: "0 0 0.3125rem" }}>
               Welcome back
             </h1>
@@ -217,6 +223,7 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
           {/* Controlled inputs bound to React state */}
           <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+            {/* Name field — register tab only */}
             {tab === "register" && (
               <div>
                 <label style={labelStyle}>Full Name</label>
@@ -229,6 +236,7 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
                 />
               </div>
             )}
+            {/* Email */}
             <div>
               <label style={labelStyle}>Email Address</label>
               <input
@@ -240,6 +248,7 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
                 autoComplete="email"
               />
             </div>
+            {/* Password with show/hide toggle */}
             <div>
               <label style={labelStyle}>Password</label>
               <div style={{ position: "relative" }}>
@@ -260,6 +269,7 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
               </div>
             </div>
 
+            {/* Inline error / success messages */}
             {error && (
               <p style={{ margin: 0, color: C.terra, fontSize: "0.8rem", fontWeight: 600 }}>
                 {error}
@@ -271,6 +281,7 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
               </p>
             )}
 
+            {/* Primary submit — login or create account */}
             <button
               type="button"
               onClick={() => void handleSubmit()}
@@ -288,6 +299,7 @@ export function LoginScreen({ onLogin }: { onLogin: () => void }) {
                 : (tab === "login" ? "Login →" : "Create Account →")}
             </button>
 
+            {/* Shown after register or unconfirmed-login attempt */}
             {showResend && (
               <button
                 type="button"

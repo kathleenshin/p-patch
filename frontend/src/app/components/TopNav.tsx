@@ -2,9 +2,9 @@ import type { ElementType } from "react";
 import {
   Bell, ClipboardList, Home, LayoutGrid, Archive, ShieldCheck, LogOut,
 } from "lucide-react";
-import { C, sans, serif } from "../theme";
+import { C, sans } from "../theme";
 import type { Screen } from "../types";
-import { DoodleLeaf } from "./DoodleLeaf";
+import parkLogo from "../../assets/judkins-park-logo.png";
 import { useAuth } from "@/app/auth/AuthContext.tsx";
 
 export function TopNav({ screen, setScreen }: { screen: Screen; setScreen: (s: Screen) => void }) {
@@ -26,16 +26,16 @@ export function TopNav({ screen, setScreen }: { screen: Screen; setScreen: (s: S
     <nav style={{ background: C.header, ...sans, position: "sticky", top: 0, zIndex: 20,
       display: "flex", alignItems: "center", justifyContent: "space-between",
       padding: "0 4%", height: "3.25rem" }}>
-      {/* Brand */}
+      {/* Brand logo — click returns to dashboard */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer",
         flexShrink: 0 }} onClick={() => setScreen("dashboard")}>
-        <DoodleLeaf size={24} color={C.white} />
-        <span style={{ ...serif, color: C.white, fontWeight: 700, fontSize: "0.95rem",
-          whiteSpace: "nowrap" }}>
-          Judkins Park P-Patch Gardening
-        </span>
+        <img
+          src={parkLogo}
+          alt="Judkins Park P-Patch"
+          style={{ height: "3rem", width: "auto", objectFit: "contain", display: "block" }}
+        />
       </div>
-      {/* Links */}
+      {/* Primary screen links (role-gated above) */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.125rem" }}>
         {links.map((l) => {
           const active = screen === l.screen;
@@ -66,7 +66,7 @@ export function TopNav({ screen, setScreen }: { screen: Screen; setScreen: (s: S
           </button>
         )}
       </div>
-      {/* Actions */}
+      {/* Status, notifications, avatar, logout */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.625rem" }}>
         {/* Pending = authenticated but not yet approved by an admin. */}
         {!isApproved && (
@@ -74,10 +74,12 @@ export function TopNav({ screen, setScreen }: { screen: Screen; setScreen: (s: S
             Pending approval
           </span>
         )}
+        {/* Notifications placeholder */}
         <button style={{ background: "rgba(255,255,255,0.1)", border: "none", borderRadius: "0.625rem",
           padding: "0.4375rem", cursor: "pointer", display: "flex" }}>
           <Bell size={16} color={C.amber} />
         </button>
+        {/* User initial avatar */}
         <div style={{ width: "2rem", height: "2rem", borderRadius: "50%",
           background: `linear-gradient(135deg, ${C.terra}, ${C.amber})`,
           display: "flex", alignItems: "center", justifyContent: "center",
