@@ -30,7 +30,6 @@ urlpatterns = [
     path("api/auth/", include("users.urls")),
     path("api/", include("plots.urls")),
     path("api/help-requests/", include("help_requests.urls")),
-
 ]
 
 # Serve locally stored uploads in development only.
