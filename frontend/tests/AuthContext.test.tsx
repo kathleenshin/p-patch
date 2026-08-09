@@ -16,6 +16,9 @@ vi.mock("@/lib/authApi", () => ({
   register: (...args: unknown[]) => apiRegisterMock(...args),
   confirmEmail: (...args: unknown[]) => apiConfirmEmailMock(...args),
   resendConfirmation: (...args: unknown[]) => apiResendConfirmationMock(...args),
+  changePassword: vi.fn(),
+  changeEmail: vi.fn(),
+  confirmEmailChange: vi.fn(),
   logout: (...args: unknown[]) => apiLogoutMock(...args),
 }));
 
