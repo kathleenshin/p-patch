@@ -39,16 +39,23 @@ export function DashboardScreen({
   setScreen: (s: Screen) => void;
   setSelectedPlotId: (plotId: number) => void;
 }) {
-  const { isApproved } = useAuth();
+  const { isApproved, accessToken } = useAuth();
   const { plots, plotsLoading, plotsError } = usePlots();
   const [helpRequests, setHelpRequests] = useState<HelpRequest[]>([]);
 
   useEffect(() => {
     let ignore = false;
 
+    if (!accessToken) {
+      setHelpRequests([]);
+      return () => {
+        ignore = true;
+      };
+    }
+
     async function loadHelpRequests() {
       try {
-        const data = await fetchHelpRequests();
+        const data = await fetchHelpRequests(accessToken);
         if (!ignore) {
           setHelpRequests(data);
         }
@@ -64,7 +71,7 @@ export function DashboardScreen({
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [accessToken]);
 
   const helpStatusByPlotId = new Map<number, "active" | "pending" | "done">();
   const statusRank: Record<"active" | "pending" | "done", number> = {

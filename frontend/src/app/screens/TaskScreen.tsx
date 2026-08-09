@@ -79,8 +79,13 @@ export function TaskScreen() {
   };
 
   const loadRequests = async () => {
+    if (!accessToken) {
+      setRequests([]);
+      return;
+    }
+
     try {
-      const data = await fetchHelpRequests();
+      const data = await fetchHelpRequests(accessToken);
       setRequests(data);
     } catch {
       setError("Unable to load help requests.");
@@ -151,6 +156,11 @@ export function TaskScreen() {
   }, [accessToken]);
 
   const handleCreateRequest = async () => {
+    if (!accessToken) {
+      setError("Please log in to create help requests.");
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -161,7 +171,7 @@ export function TaskScreen() {
       const fallbackGardenId = plots[0]?.garden ?? 1;
       const gardenId = selectedPlot?.gardenId ?? fallbackGardenId;
 
-      const data = await createHelpRequest({
+      const data = await createHelpRequest(accessToken, {
         title,
         description,
         garden: gardenId,
@@ -190,12 +200,17 @@ export function TaskScreen() {
   };
 
   const handleStatusChange = async (requestId: number, nextStatus: string) => {
+    if (!accessToken) {
+      setError("Please log in to update help requests.");
+      return;
+    }
+
     setStatusChangingId(requestId);
     setError(null);
     setSuccess(null);
 
     try {
-      const data = await updateHelpRequest(requestId, { status: nextStatus });
+      const data = await updateHelpRequest(accessToken, requestId, { status: nextStatus });
       setRequests((current) => current.map((request) => (request.id === requestId ? data : request)));
       setSuccess("Help request updated.");
     } catch (err) {
@@ -206,12 +221,17 @@ export function TaskScreen() {
   };
 
   const handleDeleteRequest = async (requestId: number) => {
+    if (!accessToken) {
+      setError("Please log in to delete help requests.");
+      return;
+    }
+
     setDeletingId(requestId);
     setError(null);
     setSuccess(null);
 
     try {
-      await deleteHelpRequest(requestId);
+      await deleteHelpRequest(accessToken, requestId);
       setRequests((current) => current.filter((request) => request.id !== requestId));
       setSuccess("Help request deleted.");
     } catch (err) {
@@ -240,6 +260,11 @@ export function TaskScreen() {
       return;
     }
 
+    if (!accessToken) {
+      setError("Please log in to update help requests.");
+      return;
+    }
+
     setIsSavingDetails(true);
     setError(null);
     setSuccess(null);
@@ -247,7 +272,7 @@ export function TaskScreen() {
     try {
       const selectedPlot = getSelectedPlotOption(editPlotSelection);
 
-      const data = await updateHelpRequest(selectedRequest.id, {
+      const data = await updateHelpRequest(accessToken, selectedRequest.id, {
         title: editTitle,
         description: editDescription,
         status: editStatus,

@@ -21,11 +21,13 @@ export interface UserOption {
   last_name?: string;
 }
 
-export async function fetchHelpRequests(): Promise<HelpRequest[]> {
-  return apiFetch<HelpRequest[]>('/api/help-requests/');
+export async function fetchHelpRequests(accessToken: string): Promise<HelpRequest[]> {
+  return apiFetch<HelpRequest[]>('/api/help-requests/', {
+    token: accessToken,
+  });
 }
 
-export async function createHelpRequest(payload: {
+export async function createHelpRequest(accessToken: string, payload: {
   title: string;
   description: string;
   priority: string;
@@ -38,23 +40,27 @@ export async function createHelpRequest(payload: {
 }): Promise<HelpRequest> {
   return apiFetch<HelpRequest>('/api/help-requests/', {
     method: 'POST',
+    token: accessToken,
     body: payload,
   });
 }
 
 export async function updateHelpRequest(
+  accessToken: string,
   id: number,
   payload: Partial<HelpRequest> & { status?: string; plot_number?: string },
 ): Promise<HelpRequest> {
   return apiFetch<HelpRequest>(`/api/help-requests/${id}/`, {
     method: 'PATCH',
+    token: accessToken,
     body: payload,
   });
 }
 
-export async function deleteHelpRequest(id: number): Promise<void> {
+export async function deleteHelpRequest(accessToken: string, id: number): Promise<void> {
   await apiFetch<void>(`/api/help-requests/${id}/`, {
     method: 'DELETE',
+    token: accessToken,
   });
 }
 
