@@ -9,6 +9,18 @@ DATABASES = {
     }
 }
 
+# Keep photo uploads on the local filesystem during tests (never hit real S3).
+USE_S3 = False
+MEDIA_URL = "/media/"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.core.files.storage.StaticFilesStorage",
+    },
+}
+
 # Auth suites register/resend many times from one IP; keep production rates elsewhere.
 REST_FRAMEWORK = {
     **REST_FRAMEWORK,  # noqa: F405
