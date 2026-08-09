@@ -25,6 +25,11 @@ class HelpRequestAPITests(APITestCase):
             password="password",
             is_approved=True,
         )
+        cls.pending_user = User.objects.create_user(
+            email="pending-api@example.com",
+            password="password",
+            is_approved=False,
+        )
 
         cls.garden = Garden.objects.create(name="Green Street Garden")
         cls.plot = Plot.objects.create(garden=cls.garden, plot_number="2")
@@ -185,8 +190,19 @@ class HelpRequestAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["plot"], other_plot.id)
 
-    def test_help_requests_can_be_crud_without_authentication(self):
+    def test_help_requests_require_authentication(self):
+        help_request = HelpRequest.objects.create(
+            title="Repair fence",
+            description="Fix the loose fence near the main gate.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+        )
+
         self.client.credentials()
+
+        list_response = self.client.get(reverse("help-request-list"))
+        self.assertEqual(list_response.status_code, status.HTTP_401_UNAUTHORIZED)
 
         create_response = self.client.post(
             reverse("help-request-list"),
@@ -200,21 +216,63 @@ class HelpRequestAPITests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-        created_id = create_response.data["id"]
-        detail_response = self.client.get(reverse("help-request-detail", kwargs={"pk": created_id}))
-        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        detail_response = self.client.get(reverse("help-request-detail", kwargs={"pk": help_request.id}))
+        self.assertEqual(detail_response.status_code, status.HTTP_401_UNAUTHORIZED)
 
         update_response = self.client.patch(
-            reverse("help-request-detail", kwargs={"pk": created_id}),
+            reverse("help-request-detail", kwargs={"pk": help_request.id}),
             {"status": HelpRequest.Status.PENDING},
             format="json",
         )
-        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-        delete_response = self.client.delete(reverse("help-request-detail", kwargs={"pk": created_id}))
-        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        delete_response = self.client.delete(reverse("help-request-detail", kwargs={"pk": help_request.id}))
+        self.assertEqual(delete_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_help_requests_require_approved_user(self):
+        help_request = HelpRequest.objects.create(
+            title="Path cleanup",
+            description="Sweep debris near garden entrance.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+        )
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(self.pending_user).access_token}"
+        )
+
+        list_response = self.client.get(reverse("help-request-list"))
+        self.assertEqual(list_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        create_response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Need shovels",
+                "description": "Need extra shovels for volunteers.",
+                "garden": self.garden.id,
+                "plot": self.plot.id,
+                "priority": HelpRequest.Priority.MEDIUM,
+                "category": HelpRequest.Category.OTHER,
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        detail_response = self.client.get(reverse("help-request-detail", kwargs={"pk": help_request.id}))
+        self.assertEqual(detail_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        update_response = self.client.patch(
+            reverse("help-request-detail", kwargs={"pk": help_request.id}),
+            {"status": HelpRequest.Status.PENDING},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        delete_response = self.client.delete(reverse("help-request-detail", kwargs={"pk": help_request.id}))
+        self.assertEqual(delete_response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_retrieve_update_and_delete_help_request(self):
         help_request = HelpRequest.objects.create(
