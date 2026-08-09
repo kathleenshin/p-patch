@@ -11,6 +11,8 @@ detail = HelpRequestViewSet.as_view(
 resend_claim = HelpRequestViewSet.as_view({"post": "resend_claim"})
 
 urlpatterns = [
+    # Approved-user assignee picker for Task create/edit (still used by frontend + tests).
+    path("assignees/", HelpRequestAssigneeListView.as_view(), name="help-request-assignees"),
     path("", list_create, name="help-request-list"),
     path("<int:pk>/", detail, name="help-request-detail"),
     path("<int:pk>/resend-claim/", resend_claim, name="help-request-resend-claim"),

@@ -2,7 +2,7 @@ import datetime
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from rest_framework import status
@@ -414,7 +414,12 @@ class HelpRequestResendClaimTests(APITestCase):
             HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(user).access_token}"
         )
 
-    @patch("notifications.services.email.send_mail", return_value=1)
+    @override_settings(
+        EMAIL_PROVIDER="console",
+        DEFAULT_FROM_EMAIL="from@example.com",
+        NOTIFICATIONS_EMAIL_SENDER="from@example.com",
+    )
+    @patch("notifications.services.console_email.send_mail", return_value=1)
     def test_garden_admin_resend_returns_member_address_count(self, mock_send_mail):
         self._auth(self.admin)
         response = self.client.post(
@@ -423,7 +428,7 @@ class HelpRequestResendClaimTests(APITestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # send_mail returns 1 (messages); API must expose address count (2).
+        # Provider returns 1 message; API must expose address count (2).
         self.assertEqual(response.data["recipients"], 2)
         self.assertEqual(response.data["detail"], "Claim email resent.")
         mock_send_mail.assert_called_once()
