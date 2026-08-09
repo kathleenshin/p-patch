@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { Plus, Filter, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import { useAuth } from "../auth/AuthContext";
 import { usePlots } from "../hooks/usePlots";
@@ -283,12 +283,6 @@ export function TaskScreen() {
             />
             <h1 style={{ ...serif, fontSize: "1.5rem", fontWeight: 700, color: C.brown, margin: 0 }}>Task Board</h1>
           </div>
-          <button style={{ background: C.card, border: `0.0625rem solid ${C.border}`, borderRadius: "0.625rem",
-            padding: "0.5rem 0.875rem", fontSize: "0.8rem", fontWeight: 700, color: C.brownMid,
-            cursor: "pointer", fontFamily: "'Nunito', sans-serif",
-            display: "flex", alignItems: "center", gap: "0.3125rem" }}>
-            <Filter size={13} /> Filter: All Tasks
-          </button>
         </div>
         {error && (
           <div style={{ marginBottom: "0.875rem", color: C.terra, fontWeight: 700, fontSize: "0.8rem" }}>{error}</div>
