@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from "react";
 import {
   ChevronRight,
   Plus,
@@ -11,8 +11,15 @@ import {
 import { C, serif, sans, mono, linkStyle } from "../theme";
 import type { Screen } from "../types";
 import { DayForecastWidget } from "../components/weather/DayForecastWidget";
+import { PlotPhotoCropModal } from "../components/plot/PlotPhotoCropModal";
 import { usePlots } from "../hooks/usePlots";
 import { usePlotNotes } from "../hooks/usePlotNotes";
+import { useAuth } from "../auth/AuthContext";
+import {
+  fetchPlotPhotos,
+  uploadPlotPhoto,
+  type PlotPhotoRecord,
+} from "@/api/plots";
 import { useWeather } from "../hooks/useWeather";
 import plotBedIcon from "../../imports/PlotPageIcon.jpg";
 import plotPhoto from "../../imports/PlotHeroImage.jpg";
@@ -33,6 +40,19 @@ export function PlotScreen({
     "overview" | "notes" | "gallery" | "history"
   >("overview");
 
+  // Remote gallery photos (local /media or S3 URLs from the API).
+  const [photos, setPhotos] = useState<PlotPhotoRecord[]>([]);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Object URL + original name for the crop modal (revoked on close).
+  const [cropSource, setCropSource] = useState<{
+    url: string;
+    fileName: string;
+  } | null>(null);
+
+  const { accessToken } = useAuth();
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [newNoteContent, setNewNoteContent] = useState("");
   const [newNoteVisibility, setNewNoteVisibility] =
@@ -63,6 +83,97 @@ export function PlotScreen({
   const { weather, weatherLoading, weatherError } = useWeather(
     focusPlot?.garden ?? null,
   );
+
+  // Prefer the newest uploaded photo for the hero; fall back to bundled art.
+  const heroPhotoSrc = photos[0]?.image_url || plotPhoto;
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadPhotos() {
+      if (!focusPlot || !accessToken) {
+        setPhotos([]);
+        setPhotoError(null);
+        return;
+      }
+
+      try {
+        setPhotoError(null);
+        const data = await fetchPlotPhotos(focusPlot.id, accessToken);
+        if (!ignore) {
+          setPhotos(data);
+        }
+      } catch (error) {
+        if (!ignore) {
+          setPhotos([]);
+          setPhotoError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load plot photos.",
+          );
+        }
+      }
+    }
+
+    void loadPhotos();
+
+    return () => {
+      ignore = true;
+    };
+  }, [accessToken, focusPlot?.id]);
+
+  const closeCropModal = () => {
+    setCropSource((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+  };
+
+  const handleUploadPhotoClick = () => {
+    if (!focusPlot || photoUploading || cropSource) return;
+    fileInputRef.current?.click();
+  };
+
+  // Open the fixed-aspect crop mask instead of uploading the raw file.
+  const handlePhotoSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file || !focusPlot || !accessToken) return;
+
+    setPhotoError(null);
+    setCropSource({
+      url: URL.createObjectURL(file),
+      fileName: file.name,
+    });
+  };
+
+  // After the user confirms the 5:2 crop, upload the capped JPEG.
+  const handleCropConfirm = async (file: File) => {
+    if (!focusPlot || !accessToken) return;
+
+    try {
+      setPhotoUploading(true);
+      setPhotoError(null);
+      const uploaded = await uploadPlotPhoto(
+        focusPlot.id,
+        file,
+        accessToken,
+      );
+      setPhotos((current) => [uploaded, ...current]);
+      setActiveTab("gallery");
+      closeCropModal();
+    } catch (error) {
+      setPhotoError(
+        error instanceof Error
+          ? error.message
+          : "Unable to upload photo.",
+      );
+      throw error;
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   const primaryOwner =
     focusPlot?.owners.find((owner) => owner.is_primary) ??
@@ -118,7 +229,11 @@ export function PlotScreen({
 
   const quickActions = [
     { label: "Add Note", Icon: Plus },
-    { label: "Upload Photo", Icon: Plus },
+      {
+          label: photoUploading ? "Uploading…" : "Upload Photo",
+          Icon: Plus,
+          onClick: handleUploadPhotoClick,
+      },
     { label: "View Plot on Map", Icon: MapPin },
     { label: "Print Plot Summary", Icon: ArrowRight },
   ];
@@ -357,29 +472,50 @@ export function PlotScreen({
               </button>
             </div>
 
-            {/* Hero photo */}
+            {/* Hero photo — uploaded image when available, else bundled placeholder */}
             <div
               style={{
                 borderRadius: "0.875rem",
                 overflow: "hidden",
                 border: `0.0625rem solid ${C.border}`,
-                aspectRatio: "16/5",
+                aspectRatio: "5 / 2",
                 boxShadow:
                   "0 0.125rem 0.625rem rgba(44,31,20,0.08)",
               }}
             >
               <img
-                src={plotPhoto}
+                src={heroPhotoSrc}
                 alt="Garden plot"
                 style={{
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
-                  objectPosition: "center 40%",
+                  objectPosition: "center",
                   display: "block",
                 }}
               />
             </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handlePhotoSelected}
+            />
+
+            {photoError ? (
+              <div
+                style={{
+                  fontSize: "0.75rem",
+                  color: C.terra,
+                  fontWeight: 600,
+                  ...sans,
+                }}
+              >
+                {photoError}
+              </div>
+            ) : null}
 
             {/* Tabs */}
             <div style={{ display: "flex", gap: 0 }}>
@@ -411,7 +547,68 @@ export function PlotScreen({
                 </button>
               ))}
             </div>
+
+            {/* Gallery tab: remote photos from local media or S3 */}
+            {activeTab === "gallery" ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fill, minmax(9rem, 1fr))",
+                  gap: "0.75rem",
+                }}
+              >
+                {photos.length === 0 ? (
+                  <div
+                    style={{
+                      fontSize: "0.8rem",
+                      color: C.muted,
+                      ...sans,
+                    }}
+                  >
+                    No photos yet. Use Upload Photo to add one.
+                  </div>
+                ) : (
+                  photos.map((photo) => (
+                    <div
+                      key={photo.id}
+                      style={{
+                        borderRadius: "0.625rem",
+                        overflow: "hidden",
+                        border: `0.0625rem solid ${C.border}`,
+                        background: C.card,
+                      }}
+                    >
+                      <img
+                        src={photo.image_url}
+                        alt={photo.caption || "Plot photo"}
+                        style={{
+                          width: "100%",
+                          aspectRatio: "5 / 2",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                      {photo.caption ? (
+                        <div
+                          style={{
+                            padding: "0.375rem 0.5rem",
+                            fontSize: "0.68rem",
+                            color: C.brownMid,
+                            ...sans,
+                          }}
+                        >
+                          {photo.caption}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : null}
+
             {/* Plot Info + Notes */}
+            {activeTab === "overview" || activeTab === "notes" ? (
             <div
               style={{
                 display: "grid",
@@ -793,6 +990,7 @@ export function PlotScreen({
                 )}
               </div>
             </div>
+            ) : null}
           </div>
 
           {/* RIGHT COLUMN */}
@@ -943,15 +1141,18 @@ export function PlotScreen({
                   flexDirection: "column",
                 }}
               >
-                {quickActions.map(({ label, Icon }) => (
+                {quickActions.map(({ label, Icon, onClick }) => (
                   <button
                     key={label}
+                    type="button"
+                    onClick={onClick}
+                    disabled={label.startsWith("Uploading")}
                     style={{
                       background: "none",
                       border: "none",
                       padding: "0.3125rem 0",
                       textAlign: "left",
-                      cursor: "pointer",
+                      cursor: onClick ? "pointer" : "default",
                       color: C.sage,
                       fontSize: "0.73rem",
                       fontWeight: 600,
@@ -960,6 +1161,7 @@ export function PlotScreen({
                       alignItems: "center",
                       gap: "0.375rem",
                       borderBottom: `0.0625rem solid ${C.creamDark}`,
+                      opacity: label.startsWith("Uploading") ? 0.6 : 1,
                     }}
                   >
                     <Icon size={11} />
@@ -971,6 +1173,15 @@ export function PlotScreen({
           </div>
         </div>
       </div>
+
+      {cropSource ? (
+        <PlotPhotoCropModal
+          imageSrc={cropSource.url}
+          fileName={cropSource.fileName}
+          onCancel={closeCropModal}
+          onConfirm={handleCropConfirm}
+        />
+      ) : null}
     </div>
   );
 }

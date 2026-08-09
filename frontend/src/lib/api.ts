@@ -47,7 +47,7 @@ function messageFromApiErrorBody(data: unknown, status: number): string {
   return `Request failed with status ${status}`;
 }
 
-/** fetch options plus optional Bearer token and JSON body helpers. */
+/** fetch options plus optional Bearer token and JSON/FormData body helpers. */
 type ApiFetchOptions = Omit<RequestInit, "body"> & {
   token?: string | null;
   body?: unknown;
@@ -56,7 +56,8 @@ type ApiFetchOptions = Omit<RequestInit, "body"> & {
 /**
  * Shared fetch wrapper for the Django API.
  * - Builds URL from VITE_API_URL
- * - Sends JSON when `body` is set
+ * - Sends JSON when `body` is a plain object
+ * - Sends multipart as-is when `body` is FormData (photo uploads)
  * - Attaches `Authorization: Bearer <token>` when `token` is set
  * - Throws ApiError on non-OK responses
  */
@@ -74,16 +75,26 @@ export async function apiFetch<T>(
   const { token, body, headers, ...rest } = options;
   const url = `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
 
-  // Call the backend with JSON + optional JWT header.
+  // FormData must not set Content-Type manually (browser adds the multipart boundary).
+  const isFormData =
+    typeof FormData !== "undefined" && body instanceof FormData;
+
   const response = await fetch(url, {
     ...rest,
     headers: {
       Accept: "application/json",
-      ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
+      ...(body !== undefined && !isFormData
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body:
+      body === undefined
+        ? undefined
+        : isFormData
+          ? (body as FormData)
+          : JSON.stringify(body),
   });
 
   // Parse JSON when possible; keep raw text otherwise.
