@@ -40,12 +40,13 @@ class WeatherForecastView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        coordinates = {
+            "latitude": float(garden.latitude),
+            "longitude": float(garden.longitude),
+        }
+
         try:
-            data = OpenMeteoService.get_forecast(
-                latitude=float(garden.latitude),
-                longitude=float(garden.longitude),
-            )
-        # Translate weather service failures into an HTTP 502 response.
+            data = OpenMeteoService.get_forecast(**coordinates)
         except WeatherServiceError as exc:
             return Response(
                 {"detail": str(exc)},
@@ -53,16 +54,9 @@ class WeatherForecastView(APIView):
             )
 
         try:
-            data["air_quality"] = {
-                "current": AirQualityService.get_current(
-                    latitude=float(garden.latitude),
-                    longitude=float(garden.longitude),
-                ),
-                "forecast": AirQualityService.get_daily_forecast(
-                    latitude=float(garden.latitude),
-                    longitude=float(garden.longitude),
-                ),
-            }
+            data["air_quality"] = AirQualityService.get_air_quality(
+                **coordinates
+            )
         except AirQualityServiceError:
             data["air_quality"] = {
                 "current": {

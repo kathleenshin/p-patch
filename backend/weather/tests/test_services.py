@@ -1,7 +1,14 @@
+from datetime import datetime
 from unittest.mock import patch
 
-from weather.services.air_quality import AirQualityService, AirQualityServiceError
-from weather.services.open_meteo import OpenMeteoService, WeatherServiceError
+from weather.services.air_quality import (
+    AirQualityService,
+    AirQualityServiceError,
+)
+from weather.services.open_meteo import (
+    OpenMeteoService,
+    WeatherServiceError,
+)
 from weather.services.open_meteo_client import OpenMeteoError
 
 from .fixtures import (
@@ -13,25 +20,52 @@ from .fixtures import (
 
 class OpenMeteoServiceTests(WeatherTestFixtures):
     @patch("weather.services.open_meteo.OpenMeteoClient.get")
-    def test_get_forecast_normalizes_open_meteo_payload(
+    def test_get_forecast_normalizes_payload(
         self,
         mock_client_get,
     ):
-        mock_client_get.return_value = self.sample_raw_weather_payload()
+        mock_client_get.return_value = (
+            self.sample_raw_weather_payload()
+        )
 
         weather = OpenMeteoService.get_forecast(
             latitude=47.6062,
             longitude=-122.3321,
         )
 
-        self.assertEqual(weather, self.sample_normalized_weather_payload())
+        self.assertEqual(
+            weather,
+            self.sample_normalized_weather_payload(),
+        )
 
     @patch("weather.services.open_meteo.OpenMeteoClient.get")
-    def test_get_forecast_sends_expected_request_parameters(
+    def test_get_forecast_uses_nighttime_description(
         self,
         mock_client_get,
     ):
-        mock_client_get.return_value = self.sample_raw_weather_payload()
+        payload = self.sample_raw_weather_payload()
+        payload["current"]["is_day"] = 0
+
+        mock_client_get.return_value = payload
+
+        weather = OpenMeteoService.get_forecast(
+            latitude=47.6062,
+            longitude=-122.3321,
+        )
+
+        self.assertEqual(
+            weather["current"]["weather_description"],
+            "Mainly Clear",
+        )
+
+    @patch("weather.services.open_meteo.OpenMeteoClient.get")
+    def test_get_forecast_sends_expected_request(
+        self,
+        mock_client_get,
+    ):
+        mock_client_get.return_value = (
+            self.sample_raw_weather_payload()
+        )
 
         OpenMeteoService.get_forecast(
             latitude=47.6062,
@@ -48,6 +82,7 @@ class OpenMeteoServiceTests(WeatherTestFixtures):
                     "apparent_temperature",
                     "relative_humidity_2m",
                     "weather_code",
+                    "is_day",
                     "wind_speed_10m",
                 ],
                 "daily": [
@@ -102,28 +137,89 @@ class OpenMeteoServiceTests(WeatherTestFixtures):
 
 
 class AirQualityServiceTests(WeatherTestFixtures):
+    @patch("weather.services.air_quality.datetime")
     @patch("weather.services.air_quality.OpenMeteoClient.get")
-    def test_get_current_normalizes_payload(
+    def test_get_air_quality_normalizes_current_and_forecast(
         self,
         mock_client_get,
+        mock_datetime,
     ):
-        mock_client_get.return_value = self.sample_air_quality_raw_payload()
+        mock_client_get.return_value = (
+            self.sample_air_quality_raw_payload()
+        )
 
-        air_quality = AirQualityService.get_current(
+        mock_datetime.now.return_value = datetime(
+            2026,
+            8,
+            8,
+            0,
+            30,
+        )
+
+        air_quality = AirQualityService.get_air_quality(
             latitude=47.6062,
             longitude=-122.3321,
         )
 
-        self.assertEqual(air_quality, self.sample_air_quality_payload())
+        self.assertEqual(
+            air_quality,
+            self.sample_air_quality_payload(),
+        )
+
+    @patch("weather.services.air_quality.datetime")
+    @patch("weather.services.air_quality.OpenMeteoClient.get")
+    def test_get_air_quality_ignores_null_values(
+        self,
+        mock_client_get,
+        mock_datetime,
+    ):
+        mock_client_get.return_value = {
+            "hourly": {
+                "time": [
+                    "2026-08-08T00:00",
+                    "2026-08-08T01:00",
+                    "2026-08-08T02:00",
+                ],
+                "us_aqi": [
+                    42,
+                    None,
+                    62,
+                ],
+            }
+        }
+
+        mock_datetime.now.return_value = datetime(
+            2026,
+            8,
+            8,
+            0,
+            30,
+        )
+
+        air_quality = AirQualityService.get_air_quality(
+            latitude=47.6062,
+            longitude=-122.3321,
+        )
+
+        self.assertEqual(
+            air_quality["current"]["us_aqi"],
+            42,
+        )
+        self.assertEqual(
+            air_quality["forecast"][0]["us_aqi_average"],
+            52,
+        )
 
     @patch("weather.services.air_quality.OpenMeteoClient.get")
-    def test_get_current_sends_expected_request_parameters(
+    def test_get_air_quality_sends_one_seven_day_request(
         self,
         mock_client_get,
     ):
-        mock_client_get.return_value = self.sample_air_quality_raw_payload()
+        mock_client_get.return_value = (
+            self.sample_air_quality_raw_payload()
+        )
 
-        AirQualityService.get_current(
+        AirQualityService.get_air_quality(
             latitude=47.6062,
             longitude=-122.3321,
         )
@@ -134,12 +230,12 @@ class AirQualityServiceTests(WeatherTestFixtures):
                 "latitude": 47.6062,
                 "longitude": -122.3321,
                 "hourly": ["us_aqi"],
-                "forecast_days": 1,
+                "forecast_days": 7,
             },
         )
 
     @patch("weather.services.air_quality.OpenMeteoClient.get")
-    def test_get_current_raises_error_on_request_failure(
+    def test_get_air_quality_raises_error_on_request_failure(
         self,
         mock_client_get,
     ):
@@ -149,27 +245,25 @@ class AirQualityServiceTests(WeatherTestFixtures):
             AirQualityServiceError,
             AIR_QUALITY_UNAVAILABLE_DETAIL,
         ):
-            AirQualityService.get_current(
+            AirQualityService.get_air_quality(
                 latitude=47.6062,
                 longitude=-122.3321,
             )
 
     @patch("weather.services.air_quality.OpenMeteoClient.get")
-    def test_get_current_raises_error_for_malformed_payload(
+    def test_get_air_quality_raises_error_for_malformed_payload(
         self,
         mock_client_get,
     ):
         mock_client_get.return_value = {
-            "hourly": {
-                "us_aqi": [None],
-            }
+            "hourly": {},
         }
 
         with self.assertRaisesRegex(
             AirQualityServiceError,
             AIR_QUALITY_UNAVAILABLE_DETAIL,
         ):
-            AirQualityService.get_current(
+            AirQualityService.get_air_quality(
                 latitude=47.6062,
                 longitude=-122.3321,
             )

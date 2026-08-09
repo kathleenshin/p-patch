@@ -20,6 +20,7 @@ class OpenMeteoService:
         "apparent_temperature",
         "relative_humidity_2m",
         "weather_code",
+        "is_day",
         "wind_speed_10m",
     ]
 
@@ -32,7 +33,6 @@ class OpenMeteoService:
         "uv_index_max",
     ]
 
-    # TODO: Implement caching to reduce requests to Open-Meteo.
     @classmethod
     def get_forecast(cls, latitude, longitude):
         try:
@@ -68,39 +68,40 @@ class OpenMeteoService:
         daily = payload["daily"]
 
         forecast = [
-            cls._normalize_day(daily, i, date)
-            for i, date in enumerate(daily["time"])
+            cls._normalize_day(daily, index)
+            for index in range(len(daily["time"]))
         ]
+
+        weather_code = current["weather_code"]
 
         return {
             "current": {
                 "temperature_f": current["temperature_2m"],
                 "feels_like_f": current["apparent_temperature"],
                 "humidity_percent": current["relative_humidity_2m"],
-                "weather_code": current["weather_code"],
+                "weather_code": weather_code,
                 "weather_description": description_for(
-                    current["weather_code"],
-                    is_day=True,
+                    weather_code,
+                    is_day=current.get("is_day", 1) != 0,
                 ),
                 "wind_speed_mph": current["wind_speed_10m"],
                 "uv_index": daily["uv_index_max"][0],
                 "precipitation_probability_percent": daily[
                     "precipitation_probability_max"
                 ][0],
-                "precipitation_inches": daily[
-                    "precipitation_sum"
-                ][0],
+                "precipitation_inches": daily["precipitation_sum"][0],
             },
             "forecast": forecast,
         }
 
     @staticmethod
-    def _normalize_day(daily, index, date):
+    def _normalize_day(daily, index):
         weather_code = daily["weather_code"][index]
 
         return {
-            "date": date,
+            "date": daily["time"][index],
             "weather_code": weather_code,
+            # Daily forecast uses the daytime weather description.
             "weather_description": description_for(
                 weather_code,
                 is_day=True,

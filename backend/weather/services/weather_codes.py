@@ -10,6 +10,8 @@ DESCRIPTIONS_PATH = (
     / "weather_descriptions.json"
 )
 
+DEFAULT_DESCRIPTION = "Mixed"
+
 _descriptions_cache = None
 
 
@@ -30,12 +32,12 @@ def description_for(weather_code, *, is_day=True):
     code_map = _description_map().get(str(weather_code))
 
     if not isinstance(code_map, dict):
-        return "Mixed"
+        return DEFAULT_DESCRIPTION
 
     period = "day" if is_day else "night"
 
     return (
         code_map.get(period)
         or code_map.get("day")
-        or "Mixed"
+        or DEFAULT_DESCRIPTION
     )
