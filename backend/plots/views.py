@@ -1,10 +1,15 @@
 from django.db.models import Prefetch, Q
 from rest_framework import generics
 from rest_framework.exceptions import ValidationError
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from django.db.models import Q
 
-from .models import Plot, PlotNote, PlotOwnership
-from .serializers import PlotNoteSerializer, PlotSerializer
-
+from .models import Plot, PlotNote, PlotPhoto, PlotOwnership
+from .serializers import (
+    PlotNoteSerializer,
+    PlotPhotoSerializer,
+    PlotSerializer,
+)
 
 # TODO: Add garden-level authorization once the shared permissions
 # implementation is finalized. For now, these endpoints rely on the
@@ -136,3 +141,44 @@ class PlotNoteDetailView(generics.RetrieveUpdateDestroyAPIView):
                 plot__garden__memberships__status="active",
             )
         ).distinct()
+
+
+# TODO: Restrict photo create/delete to active plot stewards or garden admins.
+class PlotPhotoListCreateView(generics.ListCreateAPIView):
+    """
+    List and upload plot photos.
+
+    Uploads use multipart/form-data. The ImageField saves through Django's
+    default storage (local media/ or S3 when USE_S3=True).
+    """
+
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    serializer_class = PlotPhotoSerializer
+
+    def get_queryset(self):
+        queryset = PlotPhoto.objects.select_related(
+            "plot",
+            "plot__garden",
+            "uploaded_by",
+        ).all()
+
+        plot_id = self.request.query_params.get("plot")
+        if plot_id:
+            queryset = queryset.filter(plot_id=plot_id)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(uploaded_by=self.request.user)
+
+
+class PlotPhotoDetailView(generics.RetrieveDestroyAPIView):
+    """Retrieve or delete a single plot photo."""
+
+    queryset = PlotPhoto.objects.select_related(
+        "plot",
+        "plot__garden",
+        "uploaded_by",
+    ).all()
+    serializer_class = PlotPhotoSerializer
+

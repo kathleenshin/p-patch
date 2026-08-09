@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from help_requests.models import HelpRequest
 
-from .models import Plot, PlotNote
+from .models import Plot, PlotNote, PlotPhoto
 
 
 class PlotSerializer(serializers.ModelSerializer):
@@ -141,3 +141,48 @@ class PlotNoteSerializer(serializers.ModelSerializer):
             "author",
             "created_at",
         ]
+
+
+class PlotPhotoSerializer(serializers.ModelSerializer):
+    """
+    Multipart upload serializer for plot pictures.
+
+    Clients POST multipart/form-data with `plot`, `image`, and optional `caption`.
+    `image_url` is a local /media/... URL or an S3 URL depending on USE_S3.
+    """
+
+    uploaded_by = serializers.StringRelatedField(read_only=True)
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PlotPhoto
+        fields = [
+            "id",
+            "plot",
+            "uploaded_by",
+            "image",
+            "image_url",
+            "caption",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "uploaded_by",
+            "image_url",
+            "created_at",
+        ]
+
+    def get_image_url(self, photo):
+        """Return the storage-backed URL for the uploaded image."""
+
+        if not photo.image:
+            return None
+
+        request = self.context.get("request")
+        url = photo.image.url
+
+        # Local FileSystemStorage URLs are relative; make them absolute for the SPA.
+        if request is not None and url.startswith("/"):
+            return request.build_absolute_uri(url)
+
+        return url
