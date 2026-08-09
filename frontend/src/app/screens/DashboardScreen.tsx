@@ -45,20 +45,28 @@ export function DashboardScreen({
       const primaryOwner =
         plot.owners.find((owner) => owner.is_primary) ??
         plot.owners[0];
+      const helpStatus = plot.help_status;
+      const needsHelp = helpStatus === "active" || helpStatus === "pending";
+      const isMine = plot.is_mine;
+      const isOccupied = plot.owners.length > 0;
 
       return {
         id: plot.id,
         plotNumber: plot.plot_number,
-        needsHelp: plot.has_open_help_request,
+        needsHelp,
+        isMine,
+        isOccupied,
         owner: primaryOwner?.name,
         since: primaryOwner?.start_date ?? undefined,
-        state: plot.is_mine
-          ? "mine"
-          : plot.has_open_help_request
-            ? "help-needed"
-            : plot.owners.length === 0
-              ? "available"
-              : "active",
+        state: helpStatus === "active"
+          ? "help-active"
+          : helpStatus === "pending"
+            ? "help-pending"
+            : isMine
+              ? "mine"
+              : !isOccupied
+                ? "available"
+                : "active",
       };
     });
 
