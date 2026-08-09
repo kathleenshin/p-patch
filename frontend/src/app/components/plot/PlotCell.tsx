@@ -106,7 +106,7 @@ export function PlotCell({
             height: "2.5rem",
           }}
         >
-          {(plot.state === "active" || plot.state === "mine") && (
+          {(plot.state === "active" || plot.state === "mine" || plot.state === "help-done") && (
             <PlantIcon size={36} />
           )}
 

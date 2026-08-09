@@ -110,6 +110,81 @@ class HelpRequestAPITests(APITestCase):
         self.assertEqual(response.data["title"], "Repair shed")
         self.assertEqual(response.data["created_by"], self.user.id)
 
+    def test_create_help_request_with_plot_number(self):
+        response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Need mulch",
+                "description": "Need help adding mulch before rain.",
+                "garden": self.garden.id,
+                "plot_number": self.plot.plot_number,
+                "priority": HelpRequest.Priority.MEDIUM,
+                "category": HelpRequest.Category.GARDENING,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["plot"], self.plot.id)
+
+    def test_create_help_request_rejects_unknown_plot_number(self):
+        response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Need tool",
+                "description": "Missing rake.",
+                "garden": self.garden.id,
+                "plot_number": "999",
+                "priority": HelpRequest.Priority.LOW,
+                "category": HelpRequest.Category.OTHER,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("plot_number", response.data)
+
+    def test_create_help_request_rejects_conflicting_plot_and_plot_number(self):
+        other_plot = Plot.objects.create(garden=self.garden, plot_number="3")
+
+        response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Fence help",
+                "description": "Fence repair help needed.",
+                "garden": self.garden.id,
+                "plot": other_plot.id,
+                "plot_number": self.plot.plot_number,
+                "priority": HelpRequest.Priority.HIGH,
+                "category": HelpRequest.Category.MAINTENANCE,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("plot", response.data)
+
+    def test_partial_update_help_request_plot_with_plot_number(self):
+        help_request = HelpRequest.objects.create(
+            title="Move compost",
+            description="Move compost to beds.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+        )
+        other_plot = Plot.objects.create(garden=self.garden, plot_number="7")
+
+        response = self.client.patch(
+            reverse("help-request-detail", kwargs={"pk": help_request.id}),
+            {
+                "plot_number": other_plot.plot_number,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["plot"], other_plot.id)
+
     def test_help_requests_can_be_crud_without_authentication(self):
         self.client.credentials()
 

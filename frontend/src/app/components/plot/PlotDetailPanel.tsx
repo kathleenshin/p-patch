@@ -71,11 +71,11 @@ export function PlotDetailPanel({
             : `0.0938rem solid ${col.border}`,
         }}
       >
-        {(plot.state === "active" || plot.state === "mine") && (
+        {(plot.state === "active" || plot.state === "mine" || plot.state === "help-done") && (
           <PlantIcon size={14} />
         )}
 
-        {plot.state === "help-needed" && (
+        {(plot.state === "help-active" || plot.state === "help-pending") && (
           <AlertTriangle
             size={12}
             color={col.text}

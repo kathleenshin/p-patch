@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Plus, Filter, X } from "lucide-react";
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import { useAuth } from "../auth/AuthContext";
+import { usePlots } from "../hooks/usePlots";
 import taskIcon from "../../imports/TaskPageIcon.jpg";
 import {
   createHelpRequest,
@@ -38,6 +39,7 @@ const initialColumns: Column[] = [
 
 export function TaskScreen() {
   const { accessToken } = useAuth();
+  const { plots } = usePlots();
   const [columns] = useState(initialColumns);
   const [showNew, setShowNew] = useState(false);
   const [title, setTitle] = useState("");
@@ -60,6 +62,8 @@ export function TaskScreen() {
   const [editDueDate, setEditDueDate] = useState("");
   const [assignee, setAssignee] = useState<number | "">("" );
   const [editAssignee, setEditAssignee] = useState<number | "">("" );
+  const [plotSelection, setPlotSelection] = useState("");
+  const [editPlotSelection, setEditPlotSelection] = useState("");
   const [users, setUsers] = useState<UserOption[]>([]);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const colBg: Record<string, string> = { active: "#FFF4F0", pending: "#FFFBEE", done: "#F2FAF2" };
@@ -111,6 +115,36 @@ export function TaskScreen() {
     return displayName || user.email;
   };
 
+  const getPlotNumberLabel = (plotId: number | null | undefined) => {
+    if (!plotId) {
+      return "No Plot";
+    }
+
+    const plot = plots.find((item) => item.id === plotId);
+    return plot ? `Plot #${plot.plot_number}` : `Plot #${plotId}`;
+  };
+
+  const plotOptions = [...plots]
+    .sort((a, b) => {
+      const gardenCompare = a.garden_name.localeCompare(b.garden_name);
+      if (gardenCompare !== 0) {
+        return gardenCompare;
+      }
+
+      return a.plot_number.localeCompare(b.plot_number, undefined, {
+        numeric: true,
+      });
+    })
+    .map((plot) => ({
+      value: `${plot.id}`,
+      gardenId: plot.garden,
+      plotNumber: plot.plot_number,
+      label: `Plot #${plot.plot_number} (${plot.garden_name})`,
+    }));
+
+  const getSelectedPlotOption = (value: string) =>
+    plotOptions.find((option) => option.value === value) ?? null;
+
   useEffect(() => {
     void loadRequests();
     void loadUsers();
@@ -122,10 +156,16 @@ export function TaskScreen() {
     setSuccess(null);
 
     try {
+      const selectedPlot = getSelectedPlotOption(plotSelection);
+
+      const fallbackGardenId = plots[0]?.garden ?? 1;
+      const gardenId = selectedPlot?.gardenId ?? fallbackGardenId;
+
       const data = await createHelpRequest({
         title,
         description,
-        garden: 1,
+        garden: gardenId,
+        plot_number: selectedPlot?.plotNumber ?? "",
         priority,
         category,
         due_date: dueDate || null,
@@ -139,6 +179,7 @@ export function TaskScreen() {
       setCategory("other");
       setDueDate("");
       setAssignee("");
+      setPlotSelection("");
       setShowNew(false);
       setSuccess("Help request created.");
     } catch (err) {
@@ -189,6 +230,7 @@ export function TaskScreen() {
     setEditCategory(request.category);
     setEditDueDate(request.due_date ?? "");
     setEditAssignee(request.assigned_to ?? "");
+    setEditPlotSelection(request.plot ? String(request.plot) : "");
     setError(null);
     setSuccess(null);
   };
@@ -203,14 +245,18 @@ export function TaskScreen() {
     setSuccess(null);
 
     try {
+      const selectedPlot = getSelectedPlotOption(editPlotSelection);
+
       const data = await updateHelpRequest(selectedRequest.id, {
         title: editTitle,
         description: editDescription,
         status: editStatus,
         priority: editPriority,
         category: editCategory,
+        garden: selectedPlot?.gardenId ?? selectedRequest.garden,
         due_date: editDueDate || null,
         assigned_to: editAssignee || null,
+        plot_number: selectedPlot?.plotNumber ?? "",
       });
 
       setRequests((current) => current.map((request) => (request.id === selectedRequest.id ? data : request)));
@@ -313,6 +359,9 @@ export function TaskScreen() {
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.625rem" }}>
                           <div style={{ fontSize: "0.69rem", color: C.muted }}>
                             Assigned to: {getUserLabel(request.assigned_to, "Unassigned")}
+                          </div>
+                          <div style={{ fontSize: "0.69rem", color: C.muted }}>
+                            {getPlotNumberLabel(request.plot)}
                           </div>
                         </div>
                       );
@@ -451,6 +500,21 @@ export function TaskScreen() {
                   })}
                 </select>
               </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Plot number (optional)</label>
+                <select
+                  value={editPlotSelection}
+                  onChange={(event) => setEditPlotSelection(event.target.value)}
+                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
+                >
+                  <option value="">No plot</option>
+                  {plotOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <button onClick={handleUpdateRequestDetails} disabled={isSavingDetails}
                   style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
@@ -554,6 +618,21 @@ export function TaskScreen() {
                       </option>
                     );
                   })}
+                </select>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Plot number (optional)</label>
+                <select
+                  value={plotSelection}
+                  onChange={(event) => setPlotSelection(event.target.value)}
+                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
+                >
+                  <option value="">No plot</option>
+                  {plotOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <button onClick={handleCreateRequest} disabled={isSubmitting}

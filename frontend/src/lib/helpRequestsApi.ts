@@ -7,6 +7,8 @@ export interface HelpRequest {
   status: string;
   priority: string;
   category: string;
+  garden: number;
+  plot: number | null;
   assigned_to: number | null;
   created_by: number | null;
   due_date: string | null;
@@ -31,6 +33,8 @@ export async function createHelpRequest(payload: {
   due_date: string | null;
   assigned_to: number | null;
   garden: number;
+  plot?: number | null;
+  plot_number?: string;
 }): Promise<HelpRequest> {
   return apiFetch<HelpRequest>('/api/help-requests/', {
     method: 'POST',
@@ -38,7 +42,10 @@ export async function createHelpRequest(payload: {
   });
 }
 
-export async function updateHelpRequest(id: number, payload: Partial<HelpRequest> & { status?: string }): Promise<HelpRequest> {
+export async function updateHelpRequest(
+  id: number,
+  payload: Partial<HelpRequest> & { status?: string; plot_number?: string },
+): Promise<HelpRequest> {
   return apiFetch<HelpRequest>(`/api/help-requests/${id}/`, {
     method: 'PATCH',
     body: payload,
