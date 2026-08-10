@@ -3,6 +3,46 @@ from django.urls import path
 from .views import HelpRequestAssigneeListView, HelpRequestViewSet
 
 
+list_create = HelpRequestViewSet.as_view(
+    {
+        "get": "list",
+        "post": "create",
+    }
+)
+
+detail = HelpRequestViewSet.as_view(
+    {
+        "get": "retrieve",
+        "patch": "partial_update",
+        "delete": "destroy",
+    }
+)
+
+claim = HelpRequestViewSet.as_view(
+    {
+        "post": "claim",
+    }
+)
+
+unclaim = HelpRequestViewSet.as_view(
+    {
+        "post": "unclaim",
+    }
+)
+
+complete = HelpRequestViewSet.as_view(
+    {
+        "post": "complete",
+    }
+)
+
+resend_claim = HelpRequestViewSet.as_view(
+    {
+        "post": "resend_claim",
+    }
+)
+
+
 urlpatterns = [
     path(
         "assignees/",
@@ -11,50 +51,32 @@ urlpatterns = [
     ),
     path(
         "",
-        HelpRequestViewSet.as_view(
-            {
-                "get": "list",
-                "post": "create",
-            }
-        ),
+        list_create,
         name="help-request-list",
     ),
     path(
         "<int:pk>/",
-        HelpRequestViewSet.as_view(
-            {
-                "get": "retrieve",
-                "patch": "partial_update",
-                "delete": "destroy",
-            }
-        ),
+        detail,
         name="help-request-detail",
     ),
     path(
         "<int:pk>/claim/",
-        HelpRequestViewSet.as_view(
-            {
-                "post": "claim",
-            }
-        ),
+        claim,
         name="help-request-claim",
     ),
     path(
         "<int:pk>/unclaim/",
-        HelpRequestViewSet.as_view(
-            {
-                "post": "unclaim",
-            }
-        ),
+        unclaim,
         name="help-request-unclaim",
     ),
     path(
         "<int:pk>/complete/",
-        HelpRequestViewSet.as_view(
-            {
-                "post": "complete",
-            }
-        ),
+        complete,
         name="help-request-complete",
+    ),
+    path(
+        "<int:pk>/resend-claim/",
+        resend_claim,
+        name="help-request-resend-claim",
     ),
 ]

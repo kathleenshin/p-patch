@@ -30,6 +30,8 @@ urlpatterns = [
     path("api/auth/", include("users.urls")),
     path("api/", include("plots.urls")),
     path("api/help-requests/", include("help_requests.urls")),
+    # Community board — GET any authenticated user; POST garden-admin only (server perms).
+    path("api/announcements/", include("announcements.urls")),
     path("api/notifications/", include("notifications.urls")),
 
 ]
