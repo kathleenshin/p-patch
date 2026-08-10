@@ -55,9 +55,11 @@ class WeatherForecastView(APIView):
             "longitude": float(garden.longitude),
         }
 
-        cache_key = f"weather_forecast_garden_{garden.id}"
+        weather_cache_key = f"weather_forecast_garden_{garden.id}"
+        air_quality_cache_key = f"air_quality_garden_{garden.id}"
 
-        data = cache.get(cache_key)
+        # Weather forecast
+        data = cache.get(weather_cache_key)
 
         if data is None:
             try:
@@ -66,7 +68,7 @@ class WeatherForecastView(APIView):
                 )
 
                 cache.set(
-                    cache_key,
+                    weather_cache_key,
                     data,
                     timeout=600,
                 )
@@ -87,19 +89,46 @@ class WeatherForecastView(APIView):
                     "forecast": [],
                 }
 
-        try:
-            data["air_quality"] = (
-                AirQualityService.get_air_quality(
+                # Cache failures briefly so repeated page loads
+                # don't immediately retry a rate-limited provider.
+                cache.set(
+                    weather_cache_key,
+                    data,
+                    timeout=60,
+                )
+
+
+        # Air quality
+        air_quality = cache.get(air_quality_cache_key)
+
+        if air_quality is None:
+            try:
+                air_quality = AirQualityService.get_air_quality(
                     **coordinates
                 )
-            )
-        except AirQualityServiceError:
-            data["air_quality"] = {
-                "current": {
-                    "us_aqi": None,
-                    "label": "Unavailable",
-                },
-                "forecast": [],
-            }
+
+                cache.set(
+                    air_quality_cache_key,
+                    air_quality,
+                    timeout=600,
+                )
+
+            except AirQualityServiceError:
+                air_quality = {
+                    "current": {
+                        "us_aqi": None,
+                        "label": "Unavailable",
+                    },
+                    "forecast": [],
+                }
+
+                # Cache failures briefly for the same reason.
+                cache.set(
+                    air_quality_cache_key,
+                    air_quality,
+                    timeout=60,
+                )
+
+        data["air_quality"] = air_quality
 
         return Response(data)

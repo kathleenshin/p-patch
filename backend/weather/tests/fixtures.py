@@ -28,7 +28,15 @@ class WeatherTestFixtures(TestCase):
         cls.garden_without_coordinates = Garden.objects.create(
             name="No Coordinates Garden",
         )
+        
+    @staticmethod
+    def weather_cache_key(garden):
+        return f"weather_forecast_garden_{garden.id}"
 
+    @staticmethod
+    def air_quality_cache_key(garden):
+        return f"air_quality_garden_{garden.id}"
+    
     @staticmethod
     def weather_url():
         return reverse(WEATHER_FORECAST_URL_NAME)

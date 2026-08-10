@@ -112,7 +112,7 @@ class WeatherViewTests(WeatherTestFixtures):
 
     @patch("weather.views.AirQualityService.get_air_quality")
     @patch("weather.views.OpenMeteoService.get_forecast")
-    def test_uses_cached_weather_without_refetching(
+    def test_uses_cached_weather_and_air_quality_without_refetching(
         self,
         mock_get_forecast,
         mock_get_air_quality,
@@ -125,8 +125,12 @@ class WeatherViewTests(WeatherTestFixtures):
             timeout=600,
         )
 
-        mock_get_air_quality.return_value = (
-            self.sample_air_quality_payload()
+        cache.set(
+            self.air_quality_cache_key(
+                self.garden_with_coordinates
+            ),
+            self.sample_air_quality_payload(),
+            timeout=600,
         )
 
         response = self.weather_get(
@@ -135,13 +139,17 @@ class WeatherViewTests(WeatherTestFixtures):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json(),
+            self.sample_view_payload(),
+        )
 
         mock_get_forecast.assert_not_called()
-        mock_get_air_quality.assert_called_once()
+        mock_get_air_quality.assert_not_called()
 
     @patch("weather.views.AirQualityService.get_air_quality")
     @patch("weather.views.OpenMeteoService.get_forecast")
-    def test_successful_weather_response_is_cached(
+    def test_successful_provider_responses_are_cached(
         self,
         mock_get_forecast,
         mock_get_air_quality,
@@ -158,20 +166,30 @@ class WeatherViewTests(WeatherTestFixtures):
             garden_id=self.garden_with_coordinates.id,
         )
 
-        cached = cache.get(
+        cached_weather = cache.get(
             self.weather_cache_key(
                 self.garden_with_coordinates
             )
         )
 
+        cached_air_quality = cache.get(
+            self.air_quality_cache_key(
+                self.garden_with_coordinates
+            )
+        )
+
         self.assertEqual(
-            cached,
+            cached_weather,
             self.sample_normalized_weather_payload(),
+        )
+        self.assertEqual(
+            cached_air_quality,
+            self.sample_air_quality_payload(),
         )
 
     @patch("weather.views.AirQualityService.get_air_quality")
     @patch("weather.views.OpenMeteoService.get_forecast")
-    def test_weather_failure_returns_fallback_and_is_not_cached(
+    def test_weather_failure_returns_and_caches_fallback(
         self,
         mock_get_forecast,
         mock_get_air_quality,
@@ -198,17 +216,21 @@ class WeatherViewTests(WeatherTestFixtures):
             [],
         )
 
-        self.assertIsNone(
-            cache.get(
-                self.weather_cache_key(
-                    self.garden_with_coordinates
-                )
+        cached_weather = cache.get(
+            self.weather_cache_key(
+                self.garden_with_coordinates
             )
+        )
+
+        self.assertIsNotNone(cached_weather)
+        self.assertEqual(
+            cached_weather["current"]["weather_description"],
+            "Unavailable",
         )
 
     @patch("weather.views.AirQualityService.get_air_quality")
     @patch("weather.views.OpenMeteoService.get_forecast")
-    def test_returns_weather_when_air_quality_fails(
+    def test_air_quality_failure_returns_and_caches_fallback(
         self,
         mock_get_forecast,
         mock_get_air_quality,
@@ -225,16 +247,27 @@ class WeatherViewTests(WeatherTestFixtures):
             garden_id=self.garden_with_coordinates.id,
         )
 
-        expected = {
-            **self.sample_normalized_weather_payload(),
-            "air_quality": {
-                "current": {
-                    "us_aqi": None,
-                    "label": "Unavailable",
-                },
-                "forecast": [],
+        expected_air_quality = {
+            "current": {
+                "us_aqi": None,
+                "label": "Unavailable",
             },
+            "forecast": [],
         }
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), expected)
+        self.assertEqual(
+            response.json()["air_quality"],
+            expected_air_quality,
+        )
+
+        cached_air_quality = cache.get(
+            self.air_quality_cache_key(
+                self.garden_with_coordinates
+            )
+        )
+
+        self.assertEqual(
+            cached_air_quality,
+            expected_air_quality,
+        )
