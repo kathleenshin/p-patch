@@ -148,11 +148,14 @@ class WeeklySummaryRecipientTests(TestCase):
             user=user,
         )
 
-        create_membership(
+        # Plot ownership automatically creates the garden membership.
+        membership = user.garden_memberships.get(
             garden=self.garden,
-            user=user,
-            role="admin",
-            status="active",
+        )
+        membership.role = "admin"
+        membership.status = "active"
+        membership.save(
+            update_fields=["role", "status"],
         )
 
         emails = get_weekly_summary_recipient_emails(

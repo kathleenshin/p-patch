@@ -46,6 +46,21 @@ def get_active_admin_emails(garden: Garden) -> list[str]:
     )
 
 
+def get_urgent_help_request_recipient_emails(
+    garden: Garden,
+) -> list[str]:
+    """Return plot stewards and admins for urgent help request notifications."""
+
+    plot_steward_emails = get_active_plot_steward_emails(garden)
+    admin_emails = get_active_admin_emails(garden)
+
+    return list(
+        dict.fromkeys(
+            plot_steward_emails + admin_emails
+        )
+    )
+
+
 def get_weekly_summary_recipient_emails(garden: Garden) -> list[str]:
     """Return plot stewards and admins who should receive the weekly summary."""
 
