@@ -322,6 +322,248 @@ class HelpRequestAPITests(APITestCase):
         self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(HelpRequest.objects.filter(id=help_request.id).exists())
 
+    def test_user_can_claim_help_request(self):
+        help_request = HelpRequest.objects.create(
+            title="Water tomatoes",
+            description="Needs watering this afternoon.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-claim",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        help_request.refresh_from_db()
+
+        self.assertEqual(
+            help_request.assigned_to,
+            self.user,
+        )
+        self.assertEqual(
+            help_request.status,
+            HelpRequest.Status.PENDING,
+        )
+
+    def test_user_cannot_claim_already_claimed_help_request(self):
+        other_user = User.objects.create_user(
+            email="volunteer@example.com",
+            password="password",
+            is_approved=True,
+        )
+
+        help_request = HelpRequest.objects.create(
+            title="Water tomatoes",
+            description="Needs watering.",
+            garden=self.garden,
+            created_by=self.user,
+            assigned_to=other_user,
+            status=HelpRequest.Status.PENDING,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-claim",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_409_CONFLICT,
+        )
+
+        help_request.refresh_from_db()
+        self.assertEqual(
+            help_request.assigned_to,
+            other_user,
+        )
+
+    def test_completed_help_request_cannot_be_claimed(self):
+        help_request = HelpRequest.objects.create(
+            title="Finished task",
+            description="This has already been completed.",
+            garden=self.garden,
+            created_by=self.user,
+            status=HelpRequest.Status.DONE,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-claim",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_claimant_can_unclaim_help_request(self):
+        help_request = HelpRequest.objects.create(
+            title="Move compost",
+            description="Move compost to the beds.",
+            garden=self.garden,
+            created_by=self.user,
+            assigned_to=self.user,
+            status=HelpRequest.Status.PENDING,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-unclaim",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        help_request.refresh_from_db()
+
+        self.assertIsNone(help_request.assigned_to)
+        self.assertEqual(
+            help_request.status,
+            HelpRequest.Status.ACTIVE,
+        )
+
+    def test_other_user_cannot_unclaim_help_request(self):
+        claimant = User.objects.create_user(
+            email="claimant@example.com",
+            password="password",
+            is_approved=True,
+        )
+
+        help_request = HelpRequest.objects.create(
+            title="Move compost",
+            description="Move compost to the beds.",
+            garden=self.garden,
+            created_by=self.user,
+            assigned_to=claimant,
+            status=HelpRequest.Status.PENDING,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-unclaim",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        help_request.refresh_from_db()
+        self.assertEqual(
+            help_request.assigned_to,
+            claimant,
+        )
+
+    def test_claimant_can_complete_help_request(self):
+        help_request = HelpRequest.objects.create(
+            title="Clean shed",
+            description="Sweep and organize the shed.",
+            garden=self.garden,
+            created_by=self.user,
+            assigned_to=self.user,
+            status=HelpRequest.Status.PENDING,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-complete",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        help_request.refresh_from_db()
+
+        self.assertEqual(
+            help_request.status,
+            HelpRequest.Status.DONE,
+        )
+        self.assertIsNotNone(
+            help_request.completed_at,
+        )
+
+    def test_unclaimed_help_request_cannot_be_completed(self):
+        help_request = HelpRequest.objects.create(
+            title="Clean shed",
+            description="Sweep and organize the shed.",
+            garden=self.garden,
+            created_by=self.user,
+            status=HelpRequest.Status.ACTIVE,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-complete",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+    def test_other_user_cannot_complete_help_request(self):
+        claimant = User.objects.create_user(
+            email="claimant@example.com",
+            password="password",
+            is_approved=True,
+        )
+
+        help_request = HelpRequest.objects.create(
+            title="Clean shed",
+            description="Sweep and organize the shed.",
+            garden=self.garden,
+            created_by=self.user,
+            assigned_to=claimant,
+            status=HelpRequest.Status.PENDING,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-complete",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_403_FORBIDDEN,
+        )
+
+        help_request.refresh_from_db()
+
+        self.assertEqual(
+            help_request.status,
+            HelpRequest.Status.PENDING,
+        )
+        self.assertIsNone(
+            help_request.completed_at,
+        )
+        
 
 class HelpRequestModelTests(TestCase):
     @classmethod

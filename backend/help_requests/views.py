@@ -1,9 +1,11 @@
 import logging
 from datetime import timedelta
 
+from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
-from rest_framework import generics, viewsets
+from rest_framework import generics, status, viewsets
+from rest_framework.response import Response
 
 from notifications.services.email_provider import EmailDeliveryError
 from notifications.services.task_notifications import (
@@ -75,3 +77,126 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
                     "Failed to send urgent help request notification %s",
                     help_request.pk,
                 )
+
+    def claim(self, request, pk=None):
+        with transaction.atomic():
+            help_request = (
+                HelpRequest.objects
+                .select_for_update()
+                .get(pk=pk)
+            )
+
+            if help_request.status == HelpRequest.Status.DONE:
+                return Response(
+                    {
+                        "detail": (
+                            "Completed help requests cannot be claimed."
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            if help_request.assigned_to is not None:
+                return Response(
+                    {
+                        "detail": (
+                            "This help request has already been claimed."
+                        )
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            help_request.assigned_to = request.user
+            help_request.status = HelpRequest.Status.PENDING
+            help_request.save(
+                update_fields=[
+                    "assigned_to",
+                    "status",
+                ]
+            )
+
+        return Response(
+            self.get_serializer(help_request).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def unclaim(self, request, pk=None):
+        help_request = self.get_object()
+
+        if help_request.assigned_to_id is None:
+            return Response(
+                {
+                    "detail": (
+                        "This help request is not currently claimed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if (
+            help_request.assigned_to_id != request.user.id
+            and not request.user.is_garden_admin
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "You cannot unclaim this help request."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        help_request.assigned_to = None
+        help_request.status = HelpRequest.Status.ACTIVE
+        help_request.save(
+            update_fields=[
+                "assigned_to",
+                "status",
+            ]
+        )
+
+        return Response(
+            self.get_serializer(help_request).data,
+            status=status.HTTP_200_OK,
+        )
+
+    def complete(self, request, pk=None):
+        help_request = self.get_object()
+
+        if help_request.assigned_to_id is None:
+            return Response(
+                {
+                    "detail": (
+                        "This help request must be claimed before "
+                        "it can be completed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if (
+            help_request.assigned_to_id != request.user.id
+            and not request.user.is_garden_admin
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "You cannot complete this help request."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        help_request.status = HelpRequest.Status.DONE
+        help_request.completed_at = timezone.now()
+        help_request.save(
+            update_fields=[
+                "status",
+                "completed_at",
+            ]
+        )
+
+        return Response(
+            self.get_serializer(help_request).data,
+            status=status.HTTP_200_OK,
+        )
