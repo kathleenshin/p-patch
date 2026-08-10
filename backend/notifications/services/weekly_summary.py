@@ -21,6 +21,7 @@ def get_weekly_help_requests(garden: Garden):
             HelpRequest.Priority.MEDIUM,
         ],
         created_at__gte=week_ago,
+        assigned_to__isnull=True,
     )
 
     unclaimed_urgent_requests = Q(
