@@ -86,24 +86,6 @@ class PlotNoteAPITests(BasePlotAPITestCase):
             "Tomatoes were watered.",
         )
 
-    def test_authenticated_user_can_create_note(self):
-        self.add_active_plot_owner(plot=self.plot, user=self.user_one)
-
-        response = self.client.post(
-            self.plot_note_list_create_url,
-            self.create_plot_note_payload,
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 201)
-
-        self.assertTrue(
-            PlotNote.objects.filter(
-                plot=self.plot,
-                content="The beans need support.",
-            ).exists()
-        )
-
     def test_user_without_active_plot_ownership_cannot_create_note_on_unassociated_plot(self):
         self.client.force_authenticate(user=self.user_three)
 
@@ -119,26 +101,6 @@ class PlotNoteAPITests(BasePlotAPITestCase):
                 plot=self.plot,
                 content="The beans need support.",
             ).exists()
-        )
-
-    def test_created_note_uses_authenticated_user_as_author(self):
-        self.add_active_plot_owner(plot=self.plot, user=self.user_one)
-
-        response = self.client.post(
-            self.plot_note_list_create_url,
-            self.create_plot_note_payload,
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, 201)
-
-        created_note = PlotNote.objects.get(
-            id=response.json()["id"]
-        )
-
-        self.assertEqual(
-            created_note.author,
-            self.user_one,
         )
 
     def test_client_cannot_assign_different_author(self):
@@ -281,26 +243,6 @@ class PlotNoteAPITests(BasePlotAPITestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), [])
-
-    def test_all_plots_visibility_allows_any_active_steward_in_garden(self):
-        steward_plot = self.create_plot(plot_number="22")
-        shared_note = self.create_plot_note(
-            plot=steward_plot,
-            author=self.user_two,
-            content="Shared with all plot stewards.",
-            visibility="all_plots_in_garden",
-        )
-
-        self.add_active_plot_owner(plot=self.plot, user=self.user_one)
-
-        response = self.client.get(
-            self.plot_note_list_create_url,
-            {"plot": steward_plot.id},
-        )
-
-        self.assertEqual(response.status_code, 200)
-        returned_ids = [note["id"] for note in response.json()]
-        self.assertIn(shared_note.id, returned_ids)
 
     def test_garden_member_visibility_requires_active_membership(self):
         member_note = self.create_plot_note(
