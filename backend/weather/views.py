@@ -6,12 +6,20 @@ from rest_framework.views import APIView
 
 from plots.models import Garden
 
-from .services.air_quality import AirQualityService, AirQualityServiceError
-from .services.open_meteo import OpenMeteoService, WeatherServiceError
+from .services.air_quality import (
+    AirQualityService,
+    AirQualityServiceError,
+)
+from .services.open_meteo import (
+    OpenMeteoService,
+    WeatherServiceError,
+)
 
 
 # Weather forecasts are retrieved for the garden's location rather than
 # the retrieving user's location.
+
+
 class WeatherForecastView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -32,7 +40,10 @@ class WeatherForecastView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        garden = get_object_or_404(Garden, pk=garden_id)
+        garden = get_object_or_404(
+            Garden,
+            pk=garden_id,
+        )
 
         if garden.latitude is None or garden.longitude is None:
             return Response(
@@ -46,16 +57,30 @@ class WeatherForecastView(APIView):
         }
 
         try:
-            data = OpenMeteoService.get_forecast(**coordinates)
-        except WeatherServiceError as exc:
-            return Response(
-                {"detail": str(exc)},
-                status=status.HTTP_502_BAD_GATEWAY,
+            data = OpenMeteoService.get_forecast(
+                **coordinates
             )
+        except WeatherServiceError:
+            data = {
+                "current": {
+                    "temperature_f": None,
+                    "feels_like_f": None,
+                    "humidity_percent": None,
+                    "weather_code": None,
+                    "weather_description": "Unavailable",
+                    "wind_speed_mph": None,
+                    "uv_index": None,
+                    "precipitation_probability_percent": None,
+                    "precipitation_inches": None,
+                },
+                "forecast": [],
+            }
 
         try:
-            data["air_quality"] = AirQualityService.get_air_quality(
-                **coordinates
+            data["air_quality"] = (
+                AirQualityService.get_air_quality(
+                    **coordinates
+                )
             )
         except AirQualityServiceError:
             data["air_quality"] = {

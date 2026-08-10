@@ -52,73 +52,117 @@ class OpenMeteoService:
 
             return cls._normalize(payload)
 
-        except (
-            OpenMeteoError,
-            KeyError,
-            TypeError,
-            IndexError,
-        ) as exc:
+        except OpenMeteoError as exc:
             raise WeatherServiceError(
-                "Unable to retrieve valid weather data."
+                "Unable to retrieve weather data."
             ) from exc
+        except (KeyError, TypeError, IndexError) as exc:
+            raise WeatherServiceError(
+                "Unable to normalize weather data."
+            ) from exc
+
+    @staticmethod
+    def _first(values):
+        if not values:
+            return None
+        return values[0]
 
     @classmethod
     def _normalize(cls, payload):
-        current = payload["current"]
-        daily = payload["daily"]
+        current = payload.get("current") or {}
+        daily = payload.get("daily") or {}
+
+        times = daily.get("time") or []
 
         forecast = [
             cls._normalize_day(daily, index)
-            for index in range(len(daily["time"]))
+            for index in range(len(times))
         ]
 
-        weather_code = current["weather_code"]
+        weather_code = current.get("weather_code")
 
         return {
             "current": {
-                "temperature_f": current["temperature_2m"],
-                "feels_like_f": current["apparent_temperature"],
-                "humidity_percent": current["relative_humidity_2m"],
-                "weather_code": weather_code,
-                "weather_description": description_for(
-                    weather_code,
-                    is_day=current.get("is_day", 1) != 0,
+                "temperature_f": current.get("temperature_2m"),
+                "feels_like_f": current.get("apparent_temperature"),
+                "humidity_percent": current.get(
+                    "relative_humidity_2m"
                 ),
-                "wind_speed_mph": current["wind_speed_10m"],
-                "uv_index": daily["uv_index_max"][0],
-                "precipitation_probability_percent": daily[
-                    "precipitation_probability_max"
-                ][0],
-                "precipitation_inches": daily["precipitation_sum"][0],
+                "weather_code": weather_code,
+                "weather_description": (
+                    description_for(
+                        weather_code,
+                        is_day=current.get("is_day", 1) != 0,
+                    )
+                    if weather_code is not None
+                    else "Unavailable"
+                ),
+                "wind_speed_mph": current.get("wind_speed_10m"),
+                "uv_index": cls._first(
+                    daily.get("uv_index_max")
+                ),
+                "precipitation_probability_percent": cls._first(
+                    daily.get("precipitation_probability_max")
+                ),
+                "precipitation_inches": cls._first(
+                    daily.get("precipitation_sum")
+                ),
             },
             "forecast": forecast,
         }
 
-    @staticmethod
-    def _normalize_day(daily, index):
-        weather_code = daily["weather_code"][index]
+    @classmethod
+    def _normalize_day(cls, daily, index):
+        weather_codes = daily.get("weather_code") or []
+        times = daily.get("time") or []
+        highs = daily.get("temperature_2m_max") or []
+        lows = daily.get("temperature_2m_min") or []
+        precip_probabilities = (
+            daily.get("precipitation_probability_max") or []
+        )
+        precipitation = daily.get("precipitation_sum") or []
+        uv_indexes = daily.get("uv_index_max") or []
+
+        weather_code = (
+            weather_codes[index]
+            if index < len(weather_codes)
+            else None
+        )
 
         return {
-            "date": daily["time"][index],
+            "date": times[index] if index < len(times) else None,
             "weather_code": weather_code,
-            # Daily forecast uses the daytime weather description.
-            "weather_description": description_for(
-                weather_code,
-                is_day=True,
+            "weather_description": (
+                description_for(
+                    weather_code,
+                    is_day=True,
+                )
+                if weather_code is not None
+                else "Unavailable"
             ),
-            "high_temperature_f": daily[
-                "temperature_2m_max"
-            ][index],
-            "low_temperature_f": daily[
-                "temperature_2m_min"
-            ][index],
-            "precipitation_probability_percent": daily[
-                "precipitation_probability_max"
-            ][index],
-            "precipitation_inches": daily[
-                "precipitation_sum"
-            ][index],
-            "uv_index_max": daily[
-                "uv_index_max"
-            ][index],
+            "high_temperature_f": (
+                highs[index]
+                if index < len(highs)
+                else None
+            ),
+            "low_temperature_f": (
+                lows[index]
+                if index < len(lows)
+                else None
+            ),
+            "precipitation_probability_percent": (
+                precip_probabilities[index]
+                if index < len(precip_probabilities)
+                else None
+            ),
+            "precipitation_inches": (
+                precipitation[index]
+                if index < len(precipitation)
+                else None
+            ),
+            "uv_index_max": (
+                uv_indexes[index]
+                if index < len(uv_indexes)
+                else None
+            ),
         }

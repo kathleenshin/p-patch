@@ -1,6 +1,11 @@
 """Shared HTTP client for Open-Meteo APIs."""
 
+import logging
+
 import requests
+
+
+logger = logging.getLogger(__name__)
 
 
 class OpenMeteoError(Exception):
@@ -22,10 +27,16 @@ class OpenMeteoClient:
                 },
                 timeout=cls.TIMEOUT,
             )
+
             response.raise_for_status()
             return response.json()
 
         except requests.RequestException as exc:
+            logger.exception(
+                "Open-Meteo request failed: %s",
+                exc,
+            )
+
             raise OpenMeteoError(
                 "Unable to retrieve data from Open-Meteo."
             ) from exc
