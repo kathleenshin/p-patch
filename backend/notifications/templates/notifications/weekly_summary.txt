@@ -1,0 +1,3 @@
+Weekly summary for {{ garden.name }} is ready.
+
+Active garden members will receive this notice once per week.
