@@ -2,7 +2,6 @@ from django.db.models import Prefetch, Q
 from rest_framework import generics
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
-from django.db.models import Q
 
 from .models import Plot, PlotNote, PlotPhoto, PlotOwnership
 from .serializers import (
@@ -10,6 +9,7 @@ from .serializers import (
     PlotPhotoSerializer,
     PlotSerializer,
 )
+
 
 plot_queryset = (
     Plot.objects
@@ -32,34 +32,16 @@ class PlotListCreateView(generics.ListCreateAPIView):
     queryset = plot_queryset
     serializer_class = PlotSerializer
 
-    def get_queryset(self):
-        return Plot.objects.select_related("garden").prefetch_related(
-            Prefetch(
-                "ownerships",
-                queryset=PlotOwnership.objects.select_related("user"),
-            ),
-            "help_requests",
-        )
-
 
 # Does not support Delete for MVP
-
 class PlotDetailView(generics.RetrieveUpdateAPIView):
     queryset = plot_queryset
     serializer_class = PlotSerializer
 
-    def get_queryset(self):
-        return Plot.objects.select_related("garden").prefetch_related(
-            Prefetch(
-                "ownerships",
-                queryset=PlotOwnership.objects.select_related("user"),
-            ),
-            "help_requests",
-        )
-
 
 # TODO: Align PlotNote create, update, and delete permissions
 # TODO: Integrate PlotNote role-based permissions from users/permissions.py.
+#
 # Intended rules:
 # - active plot owner or garden admin may create a note
 # - note author or garden admin may update or delete a note
@@ -162,6 +144,7 @@ class PlotNoteDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 # TODO: Restrict photo create/delete to active plot stewards or garden admins.
+
 class PlotPhotoListCreateView(generics.ListCreateAPIView):
     """
     List and upload plot photos.
@@ -199,4 +182,3 @@ class PlotPhotoDetailView(generics.RetrieveDestroyAPIView):
         "uploaded_by",
     ).all()
     serializer_class = PlotPhotoSerializer
-
