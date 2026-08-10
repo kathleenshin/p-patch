@@ -7,12 +7,17 @@ from rest_framework import generics, permissions, viewsets
 from rest_framework import generics, viewsets
 
 from notifications.services.email_provider import EmailDeliveryError
-from notifications.services.task_notifications import notify_urgent_help_request
+from notifications.services.task_notifications import (
+    notify_urgent_help_request,
+)
 from users.models import User
 from users.permissions import IsApproved
 
 from .models import HelpRequest
-from .serializers import HelpRequestAssigneeSerializer, HelpRequestSerializer
+from .serializers import (
+    HelpRequestAssigneeSerializer,
+    HelpRequestSerializer,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -23,7 +28,9 @@ class HelpRequestAssigneeListView(generics.ListAPIView):
     serializer_class = HelpRequestAssigneeSerializer
 
     def get_queryset(self):
-        return User.objects.filter(is_approved=True).order_by("email")
+        return User.objects.filter(
+            is_approved=True
+        ).order_by("email")
 
 
 class HelpRequestViewSet(viewsets.ModelViewSet):
@@ -56,16 +63,13 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        if self.request.user.is_authenticated:
-            help_request = serializer.save(created_by=self.request.user)
-        else:
-            help_request = serializer.save()
+        help_request = serializer.save()
 
         if help_request.priority == HelpRequest.Priority.HIGH:
             try:
                 notify_urgent_help_request(help_request)
-            # Log the exception but continue without interrupting request creation
             except EmailDeliveryError:
+                # Log the error without preventing request creation.
                 logger.exception(
                     "Failed to send urgent help request notification %s",
                     help_request.pk,

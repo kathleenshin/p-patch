@@ -520,43 +520,62 @@ class HelpRequestModelTests(TestCase):
             "Repair fence",
         )
 
-    # Mock the notification so tests don't send real emails
-    @patch("help_requests.views.notify_urgent_help_request")
-    def test_high_priority_help_request_sends_notification(self, mock_notify):
-        response = self.client.post(
-            reverse("help-request-list"),
-            {
-                "title": "Urgent watering",
-                "description": "Plants need water immediately.",
-                "garden": self.garden.id,
-                "priority": HelpRequest.Priority.HIGH,
-                "category": HelpRequest.Category.WATERING,
-            },
-            format="json",
-        )
+# Mock the notification so tests don't send real emails
+@patch("help_requests.views.notify_urgent_help_request")
+def test_high_priority_help_request_sends_notification(self, mock_notify):
+    self.client.force_authenticate(user=self.user)
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+    response = self.client.post(
+        reverse("help-request-list"),
+        {
+            "title": "Urgent watering",
+            "description": "Plants need water immediately.",
+            "garden": self.garden.id,
+            "priority": HelpRequest.Priority.HIGH,
+            "category": HelpRequest.Category.WATERING,
+        },
+        format="json",
+    )
 
-        help_request = HelpRequest.objects.get(id=response.data["id"])
-        mock_notify.assert_called_once_with(help_request)
+    self.assertEqual(
+        response.status_code,
+        status.HTTP_201_CREATED,
+    )
+
+    help_request = HelpRequest.objects.get(
+        id=response.data["id"],
+    )
+
+    mock_notify.assert_called_once_with(help_request)
+
+    self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    help_request = HelpRequest.objects.get(id=response.data["id"])
+    mock_notify.assert_called_once_with(help_request)
 
 
-    @patch("help_requests.views.notify_urgent_help_request")
-    def test_medium_priority_help_request_does_not_send_notification(
-        self,
-        mock_notify,
-    ):
-        response = self.client.post(
-            reverse("help-request-list"),
-            {
-                "title": "Weeding help",
-                "description": "Need help weeding this week.",
-                "garden": self.garden.id,
-                "priority": HelpRequest.Priority.MEDIUM,
-                "category": HelpRequest.Category.GARDENING,
-            },
-            format="json",
-        )
+@patch("help_requests.views.notify_urgent_help_request")
+def test_medium_priority_help_request_does_not_send_notification(
+    self,
+    mock_notify,
+):
+    self.client.force_authenticate(user=self.user)
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        mock_notify.assert_not_called()
+    response = self.client.post(
+        reverse("help-request-list"),
+        {
+            "title": "Weeding help",
+            "description": "Need help weeding this week.",
+            "garden": self.garden.id,
+            "priority": HelpRequest.Priority.MEDIUM,
+            "category": HelpRequest.Category.GARDENING,
+        },
+        format="json",
+    )
+
+    self.assertEqual(
+        response.status_code,
+        status.HTTP_201_CREATED,
+    )
+
+    mock_notify.assert_not_called()

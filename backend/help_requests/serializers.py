@@ -8,17 +8,23 @@ from .models import HelpRequest
 
 class HelpRequestSerializer(serializers.ModelSerializer):
     created_by = serializers.PrimaryKeyRelatedField(read_only=True)
-    garden = serializers.PrimaryKeyRelatedField(queryset=Garden.objects.all())
+
+    garden = serializers.PrimaryKeyRelatedField(
+        queryset=Garden.objects.all()
+    )
+
     plot_number = serializers.CharField(
         required=False,
         allow_blank=True,
         write_only=True,
     )
+
     plot = serializers.PrimaryKeyRelatedField(
         queryset=Plot.objects.all(),
         required=False,
         allow_null=True,
     )
+
     assigned_to = serializers.PrimaryKeyRelatedField(
         queryset=User.objects.all(),
         required=False,
@@ -43,7 +49,11 @@ class HelpRequestSerializer(serializers.ModelSerializer):
             "due_date",
             "completed_at",
         ]
-        read_only_fields = ["id", "created_by", "created_at"]
+        read_only_fields = [
+            "id",
+            "created_by",
+            "created_at",
+        ]
 
     def validate(self, attrs):
         plot_number_raw = attrs.pop("plot_number", None)
@@ -60,7 +70,11 @@ class HelpRequestSerializer(serializers.ModelSerializer):
             else:
                 if not garden:
                     raise serializers.ValidationError(
-                        {"garden": "Garden is required when setting plot_number."}
+                        {
+                            "garden": (
+                                "Garden is required when setting plot_number."
+                            )
+                        }
                     )
 
                 resolved_plot = Plot.objects.filter(
@@ -72,12 +86,14 @@ class HelpRequestSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(
                         {
                             "plot_number": (
-                                "No plot with this plot number exists in the selected garden."
+                                "No plot with this plot number exists "
+                                "in the selected garden."
                             )
                         }
                     )
 
                 provided_plot = attrs.get("plot")
+
                 if (
                     provided_plot is not None
                     and provided_plot.id != resolved_plot.id
@@ -85,7 +101,8 @@ class HelpRequestSerializer(serializers.ModelSerializer):
                     raise serializers.ValidationError(
                         {
                             "plot": (
-                                "plot and plot_number refer to different plots."
+                                "plot and plot_number refer to "
+                                "different plots."
                             )
                         }
                     )
@@ -93,21 +110,36 @@ class HelpRequestSerializer(serializers.ModelSerializer):
                 attrs["plot"] = resolved_plot
 
         plot = attrs.get("plot")
-        if plot is None and self.instance is not None and "plot" not in attrs:
+
+        if (
+            plot is None
+            and self.instance is not None
+            and "plot" not in attrs
+        ):
             plot = self.instance.plot
 
-        if plot is not None and garden is not None and plot.garden_id != garden.id:
+        if (
+            plot is not None
+            and garden is not None
+            and plot.garden_id != garden.id
+        ):
             raise serializers.ValidationError(
                 {
-                    "plot": "Selected plot does not belong to the selected garden."
+                    "plot": (
+                        "Selected plot does not belong to "
+                        "the selected garden."
+                    )
                 }
             )
 
         return attrs
 
     def create(self, validated_data):
-        if self.context["request"].user.is_authenticated:
-            validated_data["created_by"] = self.context["request"].user
+        request = self.context.get("request")
+
+        if request and request.user.is_authenticated:
+            validated_data["created_by"] = request.user
+
         return super().create(validated_data)
 
 
