@@ -1,8 +1,38 @@
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from help_requests.models import HelpRequest
 
 from .models import Plot, PlotNote, PlotPhoto
+
+User = get_user_model()
+
+
+class PlotAssignSerializer(serializers.Serializer):
+    """Garden-admin body for assigning a primary steward to a plot.
+
+    Plot↔user is stored only on PlotOwnership (not a field on User).
+    """
+
+    # Approved member who will become the plot's primary steward.
+    user_id = serializers.IntegerField()
+
+    def validate_user_id(self, user_id):
+        # Resolve once here so the view can reuse the User instance.
+        try:
+            user = User.objects.get(pk=user_id)
+        except User.DoesNotExist as exc:
+            raise serializers.ValidationError("User not found.") from exc
+
+        # Pending registrations must be approved before receiving a plot.
+        if not user.is_approved:
+            raise serializers.ValidationError(
+                "Only approved members can be assigned as plot stewards."
+            )
+
+        # Stash for PlotAssignView — avoids a second User.objects.get.
+        self.context["assignee"] = user
+        return user_id
 
 
 class PlotSerializer(serializers.ModelSerializer):

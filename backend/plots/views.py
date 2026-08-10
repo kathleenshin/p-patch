@@ -1,10 +1,16 @@
 from django.db.models import Prefetch, Q
-from rest_framework import generics
+from django.utils import timezone
+from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from users.permissions import IsGardenAdmin
 
 from .models import Plot, PlotNote, PlotPhoto, PlotOwnership
 from .serializers import (
+    PlotAssignSerializer,
     PlotNoteSerializer,
     PlotPhotoSerializer,
     PlotSerializer,
@@ -59,16 +65,90 @@ class PlotListCreateView(generics.ListCreateAPIView):
     queryset = plot_queryset
     serializer_class = PlotSerializer
 
+    def get_queryset(self):
+        return Plot.objects.select_related("garden").prefetch_related(
+            Prefetch(
+                "ownerships",
+                queryset=PlotOwnership.objects.select_related("user"),
+            ),
+            "help_requests",
+        )
+
 
 # Does not support Delete for MVP
+
 class PlotDetailView(generics.RetrieveUpdateAPIView):
     queryset = plot_queryset
     serializer_class = PlotSerializer
 
+    def get_queryset(self):
+        return Plot.objects.select_related("garden").prefetch_related(
+            Prefetch(
+                "ownerships",
+                queryset=PlotOwnership.objects.select_related("user"),
+            ),
+            "help_requests",
+        )
+
+
+class PlotAssignView(APIView):
+    """Assign an approved member as the primary steward of an unassigned plot.
+
+    Used by Admin → Unassigned Plots → Assign. Creates PlotOwnership with
+    is_primary=True; PlotOwnership.save() also ensures GardenMembership.
+    """
+
+    # Same gate as pending approve / resend-claim — garden admin JWT only.
+    permission_classes = [IsGardenAdmin]
+
+    def post(self, request, pk):
+        # Prefer the shared queryset so the response can include owners + help flags.
+        try:
+            plot = plot_queryset.get(pk=pk)
+        except Plot.DoesNotExist:
+            return Response(
+                {"detail": "Not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        serializer = PlotAssignSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        # Validated + loaded in PlotAssignSerializer.validate_user_id.
+        assignee = serializer.context["assignee"]
+
+        # Inactive plots stay off the Admin unassigned list, but guard the API too.
+        if not plot.is_active:
+            return Response(
+                {"detail": "Cannot assign an inactive plot."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # This endpoint is for empty plots only (no secondary-steward add yet).
+        has_active_owner = plot.ownerships.filter(end_date__isnull=True).exists()
+        if has_active_owner:
+            return Response(
+                {"detail": "Plot already has an active steward."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Join-table write: user becomes primary steward; M2M reverse is user.plots.
+        PlotOwnership.objects.create(
+            plot=plot,
+            user=assignee,
+            is_primary=True,
+            start_date=timezone.localdate(),
+        )
+
+        # Refresh prefetched ownerships for the response payload.
+        plot = plot_queryset.get(pk=plot.pk)
+        return Response(
+            PlotSerializer(plot, context={"request": request}).data,
+            status=status.HTTP_200_OK,
+        )
+
 
 # TODO: Align PlotNote create, update, and delete permissions
 # TODO: Integrate PlotNote role-based permissions from users/permissions.py.
-#
 # Intended rules:
 # - active plot owner or garden admin may create a note
 # - note author or garden admin may update or delete a note
