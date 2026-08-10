@@ -338,6 +338,9 @@ export function TaskScreen() {
         {success && (
           <div style={{ marginBottom: "0.875rem", color: C.sage, fontWeight: 700, fontSize: "0.8rem" }}>{success}</div>
         )}
+        <div style={{ marginBottom: "0.875rem", fontSize: "0.72rem", color: C.muted, lineHeight: 1.5 }}>
+          Unclaimed requests expire after 14 days.
+        </div>
         <div className="task-board-cols">
           {columns.map((col) => (
             <div key={col.id}>
@@ -624,6 +627,9 @@ export function TaskScreen() {
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
+                <div style={{ fontSize: "0.68rem", color: C.muted, lineHeight: 1.4 }}>
+                  High-priority requests notify gardeners immediately. Low and medium priority requests are included in the weekly garden update on Friday mornings.
+                </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
                 <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Request type</label>

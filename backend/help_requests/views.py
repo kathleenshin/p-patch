@@ -3,7 +3,6 @@ from datetime import timedelta
 
 from django.db.models import Q
 from django.utils import timezone
-from rest_framework import generics, permissions, viewsets
 from rest_framework import generics, viewsets
 
 from notifications.services.email_provider import EmailDeliveryError
@@ -63,15 +62,16 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        help_request = serializer.save()
+        help_request = serializer.save(
+            created_by=self.request.user
+        )
 
         if help_request.priority == HelpRequest.Priority.HIGH:
             try:
                 notify_urgent_help_request(help_request)
             except EmailDeliveryError:
-                # Log the error without preventing request creation.
+                # Log the exception but continue without interrupting request creation.
                 logger.exception(
                     "Failed to send urgent help request notification %s",
                     help_request.pk,
                 )
-        serializer.save(created_by=self.request.user)
