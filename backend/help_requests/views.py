@@ -5,15 +5,20 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
 
 from notifications.services.email_provider import EmailDeliveryError
+from notifications.services.recipients import (
+    get_active_garden_member_emails,
+)
 from notifications.services.task_notifications import (
+    notify_new_help_request,
     notify_urgent_help_request,
 )
 from users.models import User
-from users.permissions import IsApproved
+from users.permissions import IsApproved, IsGardenAdmin
 
 from .models import HelpRequest
 from .serializers import (
@@ -40,6 +45,7 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
     permission_classes = [IsApproved]
 
     def get_queryset(self):
+        # Keep claimed tasks; only show unclaimed ones from the last 14 days.
         cutoff = timezone.now() - timedelta(days=14)
 
         claimed_requests = Q(
@@ -64,16 +70,34 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
             )
         )
 
+    def get_permissions(self):
+        # Resend claim is garden-admin only;
+        # all other actions use permission_classes.
+        if self.action == "resend_claim":
+            return [IsGardenAdmin()]
+
+        return super().get_permissions()
+
     def perform_create(self, serializer):
         help_request = serializer.save(
             created_by=self.request.user
         )
 
+        # Email every active garden member.
+        # Never block request creation on mail failure.
+        try:
+            notify_new_help_request(help_request)
+        except EmailDeliveryError:
+            logger.exception(
+                "Failed to send new help request notification %s",
+                help_request.pk,
+            )
+
+        # High-priority requests also notify stewards/admins.
         if help_request.priority == HelpRequest.Priority.HIGH:
             try:
                 notify_urgent_help_request(help_request)
             except EmailDeliveryError:
-                # Log the exception but continue without interrupting request creation.
                 logger.exception(
                     "Failed to send urgent help request notification %s",
                     help_request.pk,
@@ -210,4 +234,86 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
         return Response(
             self.get_serializer(help_request).data,
             status=status.HTTP_200_OK,
+        )
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="resend-claim",
+    )
+    def resend_claim(self, request, pk=None):
+        """Re-send claim email; HIGH also re-sends urgent notification."""
+
+        help_request = self.get_object()
+
+        if help_request.assigned_to_id is not None:
+            return Response(
+                {
+                    "detail": (
+                        "Help request already has an assignee."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if help_request.status == HelpRequest.Status.DONE:
+            return Response(
+                {
+                    "detail": (
+                        "Cannot resend claim email for "
+                        "a completed request."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        recipient_count = len(
+            get_active_garden_member_emails(
+                help_request.garden
+            )
+        )
+
+        try:
+            notify_new_help_request(help_request)
+        except EmailDeliveryError:
+            logger.exception(
+                "Failed to resend claim email for help request %s",
+                help_request.pk,
+            )
+
+            return Response(
+                {
+                    "detail": (
+                        "Failed to send claim email."
+                    )
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        if help_request.priority == HelpRequest.Priority.HIGH:
+            try:
+                notify_urgent_help_request(help_request)
+            except EmailDeliveryError:
+                logger.exception(
+                    "Failed to resend urgent help request "
+                    "notification %s",
+                    help_request.pk,
+                )
+
+                return Response(
+                    {
+                        "detail": (
+                            "Claim email resent, but urgent "
+                            "notification failed."
+                        ),
+                        "recipients": recipient_count,
+                    },
+                    status=status.HTTP_502_BAD_GATEWAY,
+                )
+
+        return Response(
+            {
+                "detail": "Claim email resent.",
+                "recipients": recipient_count,
+            }
         )
