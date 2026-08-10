@@ -11,6 +11,7 @@ from notifications.services.task_notifications import (
 from notifications.tests.fixtures import (
     create_garden,
     create_help_request,
+    create_membership,
     create_plot,
     create_user,
 )
@@ -19,10 +20,17 @@ from notifications.tests.fixtures import (
 class NotifyUrgentHelpRequestTests(TestCase):
     def setUp(self):
         self.garden = create_garden(name="Garden A")
+
         self.user = create_user(
             username="garden-member",
             email="member@example.com",
         )
+
+        self.admin = create_user(
+            username="garden-admin",
+            email="admin@example.com",
+        )
+
         self.plot = create_plot(
             garden=self.garden,
             plot_number="12",
@@ -31,6 +39,13 @@ class NotifyUrgentHelpRequestTests(TestCase):
         PlotOwnership.objects.create(
             plot=self.plot,
             user=self.user,
+        )
+
+        create_membership(
+            garden=self.garden,
+            user=self.admin,
+            role="admin",
+            status="active",
         )
 
         self.notification_service = Mock()
@@ -43,7 +58,7 @@ class NotifyUrgentHelpRequestTests(TestCase):
             )
         )
 
-    def test_notifies_plot_stewards_about_plot_help_request(self):
+    def test_notifies_stewards_and_admins_about_plot_help_request(self):
         help_request = create_help_request(
             garden=self.garden,
             created_by=self.user,
@@ -63,9 +78,12 @@ class NotifyUrgentHelpRequestTests(TestCase):
 
         kwargs = self.notification_service.send_email.call_args.kwargs
 
-        self.assertEqual(
+        self.assertCountEqual(
             kwargs["recipients"],
-            ["member@example.com"],
+            [
+                "member@example.com",
+                "admin@example.com",
+            ],
         )
         self.assertEqual(
             kwargs["subject"],
@@ -84,7 +102,7 @@ class NotifyUrgentHelpRequestTests(TestCase):
             kwargs["message"],
         )
 
-    def test_notifies_plot_stewards_about_garden_help_request(self):
+    def test_notifies_stewards_and_admins_about_garden_help_request(self):
         help_request = create_help_request(
             garden=self.garden,
             created_by=self.user,
@@ -100,6 +118,13 @@ class NotifyUrgentHelpRequestTests(TestCase):
 
         kwargs = self.notification_service.send_email.call_args.kwargs
 
+        self.assertCountEqual(
+            kwargs["recipients"],
+            [
+                "member@example.com",
+                "admin@example.com",
+            ],
+        )
         self.assertEqual(
             kwargs["subject"],
             "Urgent garden help request",
@@ -117,8 +142,11 @@ class NotifyUrgentHelpRequestTests(TestCase):
             kwargs["message"],
         )
 
-    def test_sends_empty_recipient_list_when_no_plot_stewards_are_eligible(self):
+    def test_sends_empty_recipient_list_when_no_stewards_or_admins_are_eligible(
+        self,
+    ):
         PlotOwnership.objects.all().delete()
+        self.admin.garden_memberships.all().delete()
 
         help_request = create_help_request(
             garden=self.garden,
@@ -133,4 +161,7 @@ class NotifyUrgentHelpRequestTests(TestCase):
 
         kwargs = self.notification_service.send_email.call_args.kwargs
 
-        self.assertEqual(kwargs["recipients"], [])
+        self.assertEqual(
+            kwargs["recipients"],
+            [],
+        )

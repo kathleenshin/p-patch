@@ -4,16 +4,18 @@ from help_requests.models import HelpRequest
 
 from .email_provider import EmailDeliveryResult
 from .notification_service import NotificationService
-from .recipients import get_active_plot_steward_emails
+from .recipients import get_urgent_help_request_recipient_emails
 
 
 def notify_urgent_help_request(
     help_request: HelpRequest,
     notification_service: NotificationService | None = None,
 ) -> EmailDeliveryResult:
-    """Notify active plot stewards about an urgent help request."""
+    """Notify active plot stewards and admins about an urgent help request."""
 
-    recipients = get_active_plot_steward_emails(help_request.garden)
+    recipients = get_urgent_help_request_recipient_emails(
+        help_request.garden
+    )
     service = notification_service or NotificationService.from_settings()
 
     if help_request.plot:
@@ -23,6 +25,7 @@ def notify_urgent_help_request(
     else:
         subject = "Urgent garden help request"
         location = help_request.garden.name
+
     # Uses .txt email template
     # TODO: Create HTML email template for help request notifications
     message = render_to_string(

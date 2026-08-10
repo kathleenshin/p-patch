@@ -32,7 +32,8 @@ class Garden(models.Model):
 
     def __str__(self):
         return self.name
-    
+
+
 # Join/relationship table between user and garden
 class GardenMembership(models.Model):
     ROLE_CHOICES = [
@@ -100,7 +101,8 @@ class Plot(models.Model):
 
     plot_number = models.CharField(max_length=20)
 
-    is_active = models.BooleanField(default=True) # False means the plot is unavailable for use.
+    # False means the plot is unavailable for use.
+    is_active = models.BooleanField(default=True)
 
     # A plot can have multiple owners, and a user could potentially
     # help manage or be primary owner of more than one plot.
@@ -175,6 +177,31 @@ class PlotOwnership(models.Model):
                 name="plot_ownership_end_on_or_after_start",
             ),
         ]
+
+    def ensure_garden_membership(self):
+        """Ensure an active plot steward belongs to the plot's garden."""
+
+        if self.end_date is not None:
+            return
+
+        membership, created = GardenMembership.objects.get_or_create(
+            garden=self.plot.garden,
+            user=self.user,
+            defaults={
+                "role": "plot_steward",
+                "status": "active",
+            },
+        )
+
+        # Preserve an existing role, such as admin or community volunteer,
+        # but ensure the membership is active.
+        if not created and membership.status != "active":
+            membership.status = "active"
+            membership.save(update_fields=["status"])
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.ensure_garden_membership()
 
     @classmethod
     def set_primary_contact(cls, plot, user):
