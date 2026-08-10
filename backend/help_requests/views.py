@@ -1,15 +1,18 @@
+import logging
+from datetime import timedelta
+
+from django.db.models import Q
+from django.utils import timezone
 from rest_framework import generics, permissions, viewsets
+
+from notifications.services.email_provider import EmailDeliveryError
+from notifications.services.task_notifications import notify_urgent_help_request
+from users.models import User
+from users.permissions import IsApproved
 
 from .models import HelpRequest
 from .serializers import HelpRequestAssigneeSerializer, HelpRequestSerializer
-from users.models import User
-from users.permissions import IsApproved
-from notifications.services.task_notifications import notify_urgent_help_request_created
-from notifications.services.email_provider import EmailDeliveryError
-import logging
-from datetime import timedelta
-from django.db.models import Q
-from django.utils import timezone
+
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +62,7 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
 
         if help_request.priority == HelpRequest.Priority.HIGH:
             try:
-                notify_urgent_help_request_created(help_request)
+                notify_urgent_help_request(help_request)
             # Log the exception but continue without interrupting request creation
             except EmailDeliveryError:
                 logger.exception(
