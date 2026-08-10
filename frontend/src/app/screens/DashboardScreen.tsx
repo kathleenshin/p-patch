@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { ClipboardList, Newspaper } from "lucide-react";
 import { C, serif, sans, mono } from "../theme";
 import type { Screen } from "../types";
@@ -8,6 +9,7 @@ import type { PlotInfo } from "../components/plot/types";
 import dashboardIcon from "../../imports/DashboardHouseIcon.jpg";
 import { useAuth } from "../auth/AuthContext";
 import { usePlots } from "../hooks/usePlots";
+import { useWeather } from "../hooks/useWeather";
 
 
 const newsFeed = [
@@ -39,26 +41,44 @@ export function DashboardScreen({
 }) {
   const { isApproved } = useAuth();
   const { plots, plotsLoading, plotsError } = usePlots();
+  const weatherGardenId =
+    plots.find((plot) => plot.is_mine && plot.is_active)?.garden ??
+    plots[0]?.garden ??
+    null;
+  const { weather, weatherLoading, weatherError } = useWeather(weatherGardenId);
+  const [selectedForecastDate, setSelectedForecastDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedForecastDate(null);
+  }, [weatherGardenId]);
 
   const plotData: PlotInfo[] = plots
     .map((plot) => {
       const primaryOwner =
         plot.owners.find((owner) => owner.is_primary) ??
         plot.owners[0];
+      const helpStatus = plot.help_status;
+      const needsHelp = helpStatus === "active" || helpStatus === "pending";
+      const isMine = plot.is_mine;
+      const isOccupied = plot.owners.length > 0;
 
       return {
         id: plot.id,
         plotNumber: plot.plot_number,
-        needsHelp: plot.has_open_help_request,
+        needsHelp,
+        isMine,
+        isOccupied,
         owner: primaryOwner?.name,
         since: primaryOwner?.start_date ?? undefined,
-        state: plot.is_mine
-          ? "mine"
-          : plot.has_open_help_request
-            ? "help-needed"
-            : plot.owners.length === 0
-              ? "available"
-              : "active",
+        state: helpStatus === "active"
+          ? "help-active"
+          : helpStatus === "pending"
+            ? "help-pending"
+            : isMine
+              ? "mine"
+              : !isOccupied
+                ? "available"
+                : "active",
       };
     });
 
@@ -263,8 +283,19 @@ export function DashboardScreen({
               gap: "0.625rem",
             }}
           >
-            <DayForecastWidget />
-            <WeekWeatherWidget />
+            <DayForecastWidget
+              weather={weather}
+              weatherLoading={weatherLoading}
+              weatherError={weatherError}
+              selectedDate={selectedForecastDate}
+            />
+            <WeekWeatherWidget
+              weather={weather}
+              weatherLoading={weatherLoading}
+              weatherError={weatherError}
+              selectedDate={selectedForecastDate}
+              onSelectDate={setSelectedForecastDate}
+            />
           </div>
 
           {/* Task board — approved members only */}

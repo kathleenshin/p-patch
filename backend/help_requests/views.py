@@ -1,4 +1,4 @@
-from rest_framework import generics, permissions, viewsets
+from rest_framework import generics, viewsets
 
 from .models import HelpRequest
 from .serializers import HelpRequestAssigneeSerializer, HelpRequestSerializer
@@ -17,10 +17,7 @@ class HelpRequestAssigneeListView(generics.ListAPIView):
 class HelpRequestViewSet(viewsets.ModelViewSet):
     queryset = HelpRequest.objects.select_related("garden", "plot", "created_by", "assigned_to").all()
     serializer_class = HelpRequestSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsApproved]
 
     def perform_create(self, serializer):
-        if self.request.user.is_authenticated:
-            serializer.save(created_by=self.request.user)
-        else:
-            serializer.save()
+        serializer.save(created_by=self.request.user)

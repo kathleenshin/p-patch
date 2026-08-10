@@ -1,8 +1,8 @@
+from django.db.models import Prefetch, Q
 from rest_framework import generics
 from rest_framework.exceptions import ValidationError
-from django.db.models import Q
 
-from .models import Plot, PlotNote
+from .models import Plot, PlotNote, PlotOwnership
 from .serializers import PlotNoteSerializer, PlotSerializer
 
 
@@ -10,14 +10,30 @@ from .serializers import PlotNoteSerializer, PlotSerializer
 # implementation is finalized. For now, these endpoints rely on the
 # project's global authentication settings.
 class PlotListCreateView(generics.ListCreateAPIView):
-    queryset = Plot.objects.select_related("garden").all()
     serializer_class = PlotSerializer
+
+    def get_queryset(self):
+        return Plot.objects.select_related("garden").prefetch_related(
+            Prefetch(
+                "ownerships",
+                queryset=PlotOwnership.objects.select_related("user"),
+            ),
+            "help_requests",
+        )
 
 
 # Does not support Delete for MVP
 class PlotDetailView(generics.RetrieveUpdateAPIView):
-    queryset = Plot.objects.select_related("garden").all()
     serializer_class = PlotSerializer
+
+    def get_queryset(self):
+        return Plot.objects.select_related("garden").prefetch_related(
+            Prefetch(
+                "ownerships",
+                queryset=PlotOwnership.objects.select_related("user"),
+            ),
+            "help_requests",
+        )
 
 
 # TODO: Align PlotNote create, update, and delete permissions
