@@ -7,6 +7,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
+from unittest.mock import patch
 
 from plots.models import Garden, Plot
 
@@ -90,6 +91,24 @@ class HelpRequestAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
         self.assertEqual(response.data[0]["title"], "Water beds")
+
+    def test_old_unclaimed_help_request_is_excluded_from_list(self):
+        help_request = HelpRequest.objects.create(
+            title="Old unclaimed task",
+            description="Nobody picked this up.",
+            garden=self.garden,
+            created_by=self.user,
+        )
+
+        HelpRequest.objects.filter(pk=help_request.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=15)
+        )
+
+        response = self.client.get(reverse("help-request-list"))
+
+        returned_ids = [row["id"] for row in response.data]
+
+        self.assertNotIn(help_request.id, returned_ids)
 
     def test_create_help_request(self):
         response = self.client.post(
@@ -367,3 +386,44 @@ class HelpRequestModelTests(TestCase):
             str(self.help_request),
             "Repair fence",
         )
+
+    # Mock the notification so tests don't send real emails
+    @patch("help_requests.views.notify_urgent_help_request")
+    def test_high_priority_help_request_sends_notification(self, mock_notify):
+        response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Urgent watering",
+                "description": "Plants need water immediately.",
+                "garden": self.garden.id,
+                "priority": HelpRequest.Priority.HIGH,
+                "category": HelpRequest.Category.WATERING,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        help_request = HelpRequest.objects.get(id=response.data["id"])
+        mock_notify.assert_called_once_with(help_request)
+
+
+    @patch("help_requests.views.notify_urgent_help_request")
+    def test_medium_priority_help_request_does_not_send_notification(
+        self,
+        mock_notify,
+    ):
+        response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Weeding help",
+                "description": "Need help weeding this week.",
+                "garden": self.garden.id,
+                "priority": HelpRequest.Priority.MEDIUM,
+                "category": HelpRequest.Category.GARDENING,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        mock_notify.assert_not_called()
