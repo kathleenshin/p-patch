@@ -2,6 +2,7 @@ import { useEffect, useState, type CSSProperties } from "react";
 import { Plus, Filter, X } from "lucide-react";
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import { useAuth } from "../auth/AuthContext";
+import { usePlots } from "../hooks/usePlots";
 import taskIcon from "../../imports/TaskPageIcon.jpg";
 import {
   createHelpRequest,
@@ -38,6 +39,7 @@ const initialColumns: Column[] = [
 
 export function TaskScreen() {
   const { accessToken } = useAuth();
+  const { plots } = usePlots();
   const [columns] = useState(initialColumns);
   const [showNew, setShowNew] = useState(false);
   const [title, setTitle] = useState("");
@@ -62,6 +64,9 @@ export function TaskScreen() {
   const [editAssignee, setEditAssignee] = useState<number | "">("" );
   const [users, setUsers] = useState<UserOption[]>([]);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
+  const currentGardenId = plots.find((plot) => plot.is_mine && plot.is_active)?.garden
+    ?? plots.find((plot) => plot.is_mine)?.garden
+    ?? 1;
   const colBg: Record<string, string> = { active: "#FFF4F0", pending: "#FFFBEE", done: "#F2FAF2" };
   const requestColumnMap: Record<string, string> = {
     active: "active",
@@ -125,7 +130,7 @@ export function TaskScreen() {
       const data = await createHelpRequest({
         title,
         description,
-        garden: 1,
+        garden: currentGardenId,
         priority,
         category,
         due_date: dueDate || null,
@@ -250,6 +255,9 @@ export function TaskScreen() {
         {success && (
           <div style={{ marginBottom: "0.875rem", color: C.sage, fontWeight: 700, fontSize: "0.8rem" }}>{success}</div>
         )}
+        <div style={{ marginBottom: "0.875rem", fontSize: "0.72rem", color: C.muted, lineHeight: 1.5 }}>
+          Unclaimed requests expire after 14 days.
+        </div>
         <div className="task-board-cols">
           {columns.map((col) => (
             <div key={col.id}>
@@ -518,6 +526,9 @@ export function TaskScreen() {
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
+                <div style={{ fontSize: "0.68rem", color: C.muted, lineHeight: 1.4 }}>
+                  High-priority requests notify gardeners immediately. Low and medium priority requests are included in the weekly garden update on Friday mornings.
+                </div>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
                 <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Request type</label>
