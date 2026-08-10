@@ -55,7 +55,13 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        send_confirmation_email(user)
+        try:
+            send_confirmation_email(user)
+        except EmailDeliveryError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         return Response(
             {
                 "detail": (
@@ -124,7 +130,13 @@ class ResendConfirmationView(APIView):
         except User.DoesNotExist:
             return Response(detail, status=status.HTTP_200_OK)
 
-        send_confirmation_email(user)
+        try:
+            send_confirmation_email(user)
+        except EmailDeliveryError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         return Response(detail, status=status.HTTP_200_OK)
 
 

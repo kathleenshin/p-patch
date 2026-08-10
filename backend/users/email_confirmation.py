@@ -19,12 +19,21 @@ def build_confirmation_link(user) -> str:
 def send_confirmation_email(user) -> EmailDeliveryResult:
     """Build confirm content in auth; deliver via NotificationService."""
     link = build_confirmation_link(user)
-    subject = "Confirm your Judkins Park P-Patch account"
+    name = (user.first_name or "").strip() or "there"
+    subject = "Confirm your email — Judkins Park P-Patch"
     message = (
-        "Thanks for registering with Judkins Park P-Patch.\n\n"
-        "Please confirm your email address by opening this link:\n"
+        f"Hi {name},\n\n"
+        "Welcome to Judkins Park P-Patch Gardening.\n\n"
+        "Thanks for creating an account. Please confirm this email address so we "
+        "know it belongs to you. Until you confirm, you won't be able to log in.\n\n"
+        "Confirm your email by opening this link:\n"
         f"{link}\n\n"
-        "If you did not create an account, you can ignore this message."
+        "After you confirm, a garden admin still needs to approve your membership "
+        "before you can use Plots, Tasks, and Inventory. You'll see a pending "
+        "status in the app until that happens.\n\n"
+        "If the link doesn't open, copy and paste it into your browser. "
+        "If you didn't create this account, you can ignore this message.\n\n"
+        "- Judkins Park P-Patch"
     )
     # Same path as help-request notify: console locally, SES when configured.
     service = NotificationService.from_settings()
@@ -48,13 +57,19 @@ def send_email_change_confirmation(user) -> EmailDeliveryResult:
     if not user.pending_email:
         raise ValueError("User has no pending_email to confirm.")
     link = build_email_change_link(user)
-    subject = "Confirm your new Judkins Park P-Patch email"
+    name = (user.first_name or "").strip() or "there"
+    subject = "Confirm your new email — Judkins Park P-Patch"
     message = (
-        "You requested to change the email on your Judkins Park P-Patch account.\n\n"
-        "Confirm this new address by opening this link:\n"
+        f"Hi {name},\n\n"
+        "We received a request to change the email on your Judkins Park P-Patch "
+        "account to this address.\n\n"
+        "Confirm the change by opening this link:\n"
         f"{link}\n\n"
-        "Until you confirm, your account keeps using the previous email.\n"
-        "If you did not request this change, you can ignore this message."
+        f"Your current login email ({user.email}) stays active until you confirm. "
+        "After you confirm, you'll sign in with this new address.\n\n"
+        "If you didn't request this change, ignore this message — nothing will "
+        "change on your account.\n\n"
+        "- Judkins Park P-Patch"
     )
     service = NotificationService.from_settings()
     return service.send_email(

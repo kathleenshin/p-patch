@@ -8,6 +8,9 @@ const apiLoginMock = vi.fn();
 const apiRegisterMock = vi.fn();
 const apiConfirmEmailMock = vi.fn();
 const apiResendConfirmationMock = vi.fn();
+const apiChangePasswordMock = vi.fn();
+const apiChangeEmailMock = vi.fn();
+const apiConfirmEmailChangeMock = vi.fn();
 const apiLogoutMock = vi.fn();
 
 vi.mock("@/lib/authApi", () => ({
@@ -16,9 +19,9 @@ vi.mock("@/lib/authApi", () => ({
   register: (...args: unknown[]) => apiRegisterMock(...args),
   confirmEmail: (...args: unknown[]) => apiConfirmEmailMock(...args),
   resendConfirmation: (...args: unknown[]) => apiResendConfirmationMock(...args),
-  changePassword: vi.fn(),
-  changeEmail: vi.fn(),
-  confirmEmailChange: vi.fn(),
+  changePassword: (...args: unknown[]) => apiChangePasswordMock(...args),
+  changeEmail: (...args: unknown[]) => apiChangeEmailMock(...args),
+  confirmEmailChange: (...args: unknown[]) => apiConfirmEmailChangeMock(...args),
   logout: (...args: unknown[]) => apiLogoutMock(...args),
 }));
 
@@ -29,6 +32,7 @@ const sampleUser = {
   last_name: "Lovelace",
   is_approved: false,
   is_garden_admin: false,
+  pending_email: null as string | null,
 };
 
 function AuthProbe() {
@@ -40,6 +44,9 @@ function AuthProbe() {
     register,
     confirmEmail,
     resendConfirmation,
+    changePassword,
+    changeEmail,
+    confirmEmailChange,
     logout,
   } = useAuth();
 
@@ -52,6 +59,7 @@ function AuthProbe() {
       <div data-testid="auth-state">
         {isAuthenticated ? `in:${user?.email}` : "out"}
       </div>
+      <div data-testid="pending-email">{user?.pending_email ?? ""}</div>
       <button type="button" onClick={() => void login("ada@example.com", "password1")}>
         Sign in
       </button>
@@ -69,6 +77,24 @@ function AuthProbe() {
         onClick={() => void resendConfirmation("ada@example.com")}
       >
         Resend
+      </button>
+      <button
+        type="button"
+        onClick={() => void changePassword("old-pass", "new-pass-99")}
+      >
+        Change password
+      </button>
+      <button
+        type="button"
+        onClick={() => void changeEmail("ada.new@example.com", "password1")}
+      >
+        Change email
+      </button>
+      <button
+        type="button"
+        onClick={() => void confirmEmailChange("uid", "token")}
+      >
+        Confirm email change
       </button>
       <button type="button" onClick={() => logout()}>
         Sign out
@@ -89,6 +115,9 @@ describe("AuthProvider", () => {
     apiRegisterMock.mockReset();
     apiConfirmEmailMock.mockReset();
     apiResendConfirmationMock.mockReset();
+    apiChangePasswordMock.mockReset();
+    apiChangeEmailMock.mockReset();
+    apiConfirmEmailChangeMock.mockReset();
     apiLogoutMock.mockReset();
     localStorage.clear();
   });
@@ -230,6 +259,90 @@ describe("AuthProvider", () => {
       expect(apiResendConfirmationMock).toHaveBeenCalledWith("ada@example.com");
     });
     expect(screen.getByTestId("auth-state")).toHaveTextContent("out");
+  });
+
+  it("changePassword calls the API with the session token", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("p-patch.access", "access-abc");
+    fetchMeMock.mockResolvedValueOnce(sampleUser);
+    apiChangePasswordMock.mockResolvedValueOnce({ detail: "Password updated." });
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>,
+    );
+
+    await screen.findByText("in:ada@example.com");
+    await user.click(screen.getByRole("button", { name: "Change password" }));
+
+    await waitFor(() => {
+      expect(apiChangePasswordMock).toHaveBeenCalledWith(
+        "access-abc",
+        "old-pass",
+        "new-pass-99",
+      );
+    });
+  });
+
+  it("changeEmail updates pending_email on the user", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("p-patch.access", "access-abc");
+    fetchMeMock.mockResolvedValueOnce(sampleUser);
+    apiChangeEmailMock.mockResolvedValueOnce({
+      detail: "Check your inbox",
+      pending_email: "ada.new@example.com",
+    });
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>,
+    );
+
+    await screen.findByText("in:ada@example.com");
+    await user.click(screen.getByRole("button", { name: "Change email" }));
+
+    await waitFor(() => {
+      expect(apiChangeEmailMock).toHaveBeenCalledWith(
+        "access-abc",
+        "ada.new@example.com",
+        "password1",
+      );
+      expect(screen.getByTestId("pending-email")).toHaveTextContent(
+        "ada.new@example.com",
+      );
+    });
+  });
+
+  it("confirmEmailChange updates email when the session user matches", async () => {
+    const user = userEvent.setup();
+    localStorage.setItem("p-patch.access", "access-abc");
+    fetchMeMock.mockResolvedValueOnce(sampleUser);
+    apiConfirmEmailChangeMock.mockResolvedValueOnce({
+      detail: "Email updated.",
+      user: {
+        ...sampleUser,
+        email: "ada.new@example.com",
+        pending_email: null,
+      },
+    });
+
+    render(
+      <AuthProvider>
+        <AuthProbe />
+      </AuthProvider>,
+    );
+
+    await screen.findByText("in:ada@example.com");
+    await user.click(screen.getByRole("button", { name: "Confirm email change" }));
+
+    await waitFor(() => {
+      expect(apiConfirmEmailChangeMock).toHaveBeenCalledWith("uid", "token");
+      expect(screen.getByTestId("auth-state")).toHaveTextContent(
+        "in:ada.new@example.com",
+      );
+    });
   });
 
   it("logout clears auth state", async () => {

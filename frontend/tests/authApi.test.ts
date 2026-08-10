@@ -12,7 +12,10 @@ vi.mock("@/lib/api", async () => {
 });
 
 import {
+  changeEmail,
+  changePassword,
   confirmEmail,
+  confirmEmailChange,
   fetchMe,
   login,
   logout,
@@ -146,5 +149,60 @@ describe("authApi", () => {
 
     expect(getAccessToken()).toBeNull();
     expect(getRefreshToken()).toBeNull();
+  });
+
+  it("changePassword posts current and new password with bearer token", async () => {
+    apiFetchMock.mockResolvedValueOnce({ detail: "Password updated." });
+
+    const result = await changePassword("access-abc", "old-pass", "new-pass-99");
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/change-password/", {
+      method: "POST",
+      token: "access-abc",
+      body: {
+        current_password: "old-pass",
+        new_password: "new-pass-99",
+      },
+    });
+    expect(result.detail).toBe("Password updated.");
+  });
+
+  it("changeEmail posts new email and password with bearer token", async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      detail: "Check your inbox",
+      pending_email: "ada.new@example.com",
+    });
+
+    const result = await changeEmail(
+      "access-abc",
+      "ada.new@example.com",
+      "password1",
+    );
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/change-email/", {
+      method: "POST",
+      token: "access-abc",
+      body: {
+        new_email: "ada.new@example.com",
+        current_password: "password1",
+      },
+    });
+    expect(result.pending_email).toBe("ada.new@example.com");
+  });
+
+  it("confirmEmailChange posts uid and token without storing JWTs", async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      detail: "Email updated.",
+      user: { ...sampleUser, email: "ada.new@example.com", pending_email: null },
+    });
+
+    const result = await confirmEmailChange("uid123", "token456");
+
+    expect(apiFetchMock).toHaveBeenCalledWith("/api/auth/confirm-email-change/", {
+      method: "POST",
+      body: { uid: "uid123", token: "token456" },
+    });
+    expect(result.user.email).toBe("ada.new@example.com");
+    expect(getAccessToken()).toBeNull();
   });
 });

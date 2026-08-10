@@ -133,7 +133,13 @@ EMAIL_BACKEND = os.getenv(
     "django.core.mail.backends.console.EmailBackend",
 )
 
-NOTIFICATIONS_EMAIL_SENDER = os.getenv("NOTIFICATIONS_EMAIL_SENDER")
+# Prefer explicit sender; fall back to DEFAULT_FROM_EMAIL (same From for SES).
+DEFAULT_FROM_EMAIL = os.getenv(
+    "DEFAULT_FROM_EMAIL"
+)
+NOTIFICATIONS_EMAIL_SENDER = (
+    os.getenv("NOTIFICATIONS_EMAIL_SENDER") or DEFAULT_FROM_EMAIL
+)
 
 NOTIFICATIONS_WEBHOOK_TOKEN = os.getenv("NOTIFICATIONS_WEBHOOK_TOKEN", "")
 
@@ -294,10 +300,7 @@ EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
 EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True") == "True"
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
-DEFAULT_FROM_EMAIL = os.getenv(
-    "DEFAULT_FROM_EMAIL",
-    "Judkins Park P-Patch <noreply@example.com>",
-)
+# DEFAULT_FROM_EMAIL is set above with the notification settings.
 # Used in confirmation links emailed to new registrants.
 # Prefer "localhost" over 127.0.0.1 — Vite often binds IPv6 localhost only.
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").strip().rstrip("/")
