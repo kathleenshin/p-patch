@@ -15,6 +15,7 @@ export interface PlotRecord {
   is_active: boolean;
   owners: PlotOwner[];
   has_open_help_request: boolean;
+  help_status: "active" | "pending" | null;
   is_mine: boolean;
 }
 

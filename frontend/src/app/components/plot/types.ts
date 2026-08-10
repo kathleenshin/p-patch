@@ -3,7 +3,9 @@ import { C } from "../../theme";
 export type PlotState =
   | "available"
   | "active"
-  | "help-needed"
+  | "help-active"
+  | "help-pending"
+  | "help-done"
   | "mine";
 
 export const plotColors: Record<
@@ -27,11 +29,23 @@ export const plotColors: Record<
     text: C.white,
     label: "Occupied",
   },
-  "help-needed": {
+  "help-active": {
     bg: C.terra,
     border: C.terraDark,
     text: C.white,
-    label: "Needs Help",
+    label: "Help Active",
+  },
+  "help-pending": {
+    bg: C.amber,
+    border: "#A87308",
+    text: C.white,
+    label: "Help Pending",
+  },
+  "help-done": {
+    bg: C.sageLight,
+    border: C.sage,
+    text: C.sageDark,
+    label: "Help Done",
   },
   mine: {
     bg: C.sage,
@@ -44,7 +58,9 @@ export const plotColors: Record<
 export const plotEmoji: Record<PlotState, string> = {
   available: "",
   active: "",
-  "help-needed": "🟠",
+  "help-active": "🟠",
+  "help-pending": "🟡",
+  "help-done": "🟢",
   mine: "",
 };
 
@@ -53,8 +69,10 @@ export interface PlotInfo {
   plotNumber: string;
   state: PlotState;
   needsHelp: boolean;
+  isMine: boolean;
+  isOccupied: boolean;
   owner?: string;
   since?: string;
 }
 
-export type FilterKey = PlotState | "all";
+export type FilterKey = PlotState | "all" | "help-needed";

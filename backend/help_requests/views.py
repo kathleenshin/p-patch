@@ -4,6 +4,7 @@ from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
 from rest_framework import generics, permissions, viewsets
+from rest_framework import generics, viewsets
 
 from notifications.services.email_provider import EmailDeliveryError
 from notifications.services.task_notifications import notify_urgent_help_request
@@ -27,7 +28,7 @@ class HelpRequestAssigneeListView(generics.ListAPIView):
 
 class HelpRequestViewSet(viewsets.ModelViewSet):
     serializer_class = HelpRequestSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsApproved]
 
     def get_queryset(self):
         cutoff = timezone.now() - timedelta(days=14)
@@ -69,3 +70,4 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
                     "Failed to send urgent help request notification %s",
                     help_request.pk,
                 )
+        serializer.save(created_by=self.request.user)

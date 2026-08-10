@@ -27,12 +27,30 @@ class PlotListCreateView(generics.ListCreateAPIView):
     queryset = plot_queryset
     serializer_class = PlotSerializer
 
+    def get_queryset(self):
+        return Plot.objects.select_related("garden").prefetch_related(
+            Prefetch(
+                "ownerships",
+                queryset=PlotOwnership.objects.select_related("user"),
+            ),
+            "help_requests",
+        )
+
 
 # Does not support Delete for MVP
 
 class PlotDetailView(generics.RetrieveUpdateAPIView):
     queryset = plot_queryset
     serializer_class = PlotSerializer
+
+    def get_queryset(self):
+        return Plot.objects.select_related("garden").prefetch_related(
+            Prefetch(
+                "ownerships",
+                queryset=PlotOwnership.objects.select_related("user"),
+            ),
+            "help_requests",
+        )
 
 
 # TODO: Align PlotNote create, update, and delete permissions

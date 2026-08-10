@@ -1,3 +1,5 @@
+from itertools import chain
+
 from plots.models import Garden, GardenMembership, PlotOwnership
 
 

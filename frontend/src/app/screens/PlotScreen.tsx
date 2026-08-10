@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import {
   ChevronRight,
   Plus,
@@ -13,6 +13,7 @@ import type { Screen } from "../types";
 import { DayForecastWidget } from "../components/weather/DayForecastWidget";
 import { usePlots } from "../hooks/usePlots";
 import { usePlotNotes } from "../hooks/usePlotNotes";
+import { useWeather } from "../hooks/useWeather";
 import plotBedIcon from "../../imports/PlotPageIcon.jpg";
 import plotPhoto from "../../imports/PlotHeroImage.jpg";
 
@@ -23,9 +24,23 @@ export function PlotScreen({
   setScreen: (s: Screen) => void;
   selectedPlotId?: number | null;
 }) {
+  type NoteVisibility =
+    | "this_plot"
+    | "all_plots_in_garden"
+    | "garden_members";
+
   const [activeTab, setActiveTab] = useState<
     "overview" | "notes" | "gallery" | "history"
   >("overview");
+
+  const [showNoteForm, setShowNoteForm] = useState(false);
+  const [newNoteContent, setNewNoteContent] = useState("");
+  const [newNoteVisibility, setNewNoteVisibility] =
+    useState<NoteVisibility>("this_plot");
+  const [noteSubmitting, setNoteSubmitting] = useState(false);
+  const [noteSubmitError, setNoteSubmitError] = useState<string | null>(
+    null
+  );
 
   const { plots, plotsLoading, plotsError } = usePlots();
 
@@ -43,7 +58,11 @@ export function PlotScreen({
     notes,
     notesLoading,
     notesError,
+    createNote,
   } = usePlotNotes(focusPlot?.id);
+  const { weather, weatherLoading, weatherError } = useWeather(
+    focusPlot?.garden ?? null,
+  );
 
   const primaryOwner =
     focusPlot?.owners.find((owner) => owner.is_primary) ??
@@ -114,6 +133,42 @@ export function PlotScreen({
         return "Garden members";
       default:
         return visibility;
+    }
+  };
+
+  const resetNoteForm = () => {
+    setShowNoteForm(false);
+    setNewNoteContent("");
+    setNewNoteVisibility("this_plot");
+    setNoteSubmitError(null);
+  };
+
+  const handleSaveNote = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    const trimmedContent = newNoteContent.trim();
+
+    if (!trimmedContent) {
+      setNoteSubmitError("Please enter note content before saving.");
+      return;
+    }
+
+    setNoteSubmitting(true);
+    setNoteSubmitError(null);
+
+    try {
+      await createNote(trimmedContent, newNoteVisibility);
+      resetNoteForm();
+    } catch (error) {
+      setNoteSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save note."
+      );
+    } finally {
+      setNoteSubmitting(false);
     }
   };
 
@@ -458,8 +513,10 @@ export function PlotScreen({
                   </h3>
 
                   <button
-                    disabled
-                    title="Note creation is not connected yet"
+                    onClick={() => {
+                      setShowNoteForm((prev) => !prev);
+                      setNoteSubmitError(null);
+                    }}
                     style={{
                       background: C.sagePop,
                       color: C.sage,
@@ -468,8 +525,7 @@ export function PlotScreen({
                       padding: "0.1875rem 0.5625rem",
                       fontSize: "0.7rem",
                       fontWeight: 700,
-                      cursor: "not-allowed",
-                      opacity: 0.6,
+                      cursor: "pointer",
                       fontFamily: "'Nunito', sans-serif",
                       display: "flex",
                       alignItems: "center",
@@ -479,6 +535,163 @@ export function PlotScreen({
                     <Plus size={10} /> Add Note
                   </button>
                 </div>
+
+                {showNoteForm ? (
+                  <form
+                    onSubmit={handleSaveNote}
+                    style={{
+                      marginBottom: "0.75rem",
+                      padding: "0.75rem",
+                      background: C.cream,
+                      border: `0.0625rem solid ${C.border}`,
+                      borderRadius: "0.6875rem",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <textarea
+                      value={newNoteContent}
+                      onChange={(event) => {
+                        setNewNoteContent(event.target.value);
+                        if (noteSubmitError) {
+                          setNoteSubmitError(null);
+                        }
+                      }}
+                      placeholder="Write a note about this plot..."
+                      rows={4}
+                      style={{
+                        width: "100%",
+                        resize: "vertical",
+                        minHeight: "5rem",
+                        borderRadius: "0.5rem",
+                        border: `0.0625rem solid ${C.border}`,
+                        padding: "0.5rem 0.625rem",
+                        background: C.white,
+                        color: C.brown,
+                        fontSize: "0.8rem",
+                        lineHeight: 1.45,
+                        ...sans,
+                      }}
+                    />
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "0.5rem",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.375rem",
+                          color: C.brownMid,
+                          fontSize: "0.74rem",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Visibility
+                        <select
+                          value={newNoteVisibility}
+                          onChange={(event) =>
+                            setNewNoteVisibility(
+                              event.target
+                                .value as NoteVisibility
+                            )
+                          }
+                          style={{
+                            border: `0.0625rem solid ${C.border}`,
+                            borderRadius: "0.4375rem",
+                            padding: "0.25rem 0.375rem",
+                            background: C.white,
+                            color: C.brown,
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            ...sans,
+                          }}
+                        >
+                          <option value="this_plot">
+                            This plot
+                          </option>
+                          <option value="all_plots_in_garden">
+                            All plots in garden
+                          </option>
+                          <option value="garden_members">
+                            Garden members
+                          </option>
+                        </select>
+                      </label>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.375rem",
+                        }}
+                      >
+                        <button
+                          type="submit"
+                          disabled={noteSubmitting}
+                          style={{
+                            background: C.sagePop,
+                            color: C.sage,
+                            border: `0.0625rem solid ${C.sageMid}`,
+                            borderRadius: "0.4375rem",
+                            padding: "0.25rem 0.625rem",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            cursor: noteSubmitting
+                              ? "not-allowed"
+                              : "pointer",
+                            opacity: noteSubmitting ? 0.7 : 1,
+                            fontFamily: "'Nunito', sans-serif",
+                          }}
+                        >
+                          {noteSubmitting
+                            ? "Saving..."
+                            : "Save"}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={noteSubmitting}
+                          onClick={resetNoteForm}
+                          style={{
+                            background: C.white,
+                            color: C.brownMid,
+                            border: `0.0625rem solid ${C.border}`,
+                            borderRadius: "0.4375rem",
+                            padding: "0.25rem 0.625rem",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            cursor: noteSubmitting
+                              ? "not-allowed"
+                              : "pointer",
+                            opacity: noteSubmitting ? 0.7 : 1,
+                            fontFamily: "'Nunito', sans-serif",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+
+                    {noteSubmitError ? (
+                      <div
+                        style={{
+                          color: C.terra,
+                          fontSize: "0.74rem",
+                        }}
+                      >
+                        {noteSubmitError}
+                      </div>
+                    ) : null}
+                  </form>
+                ) : null}
 
                 {notesLoading ? (
                   <div
@@ -591,7 +804,12 @@ export function PlotScreen({
             }}
           >
             {/* Weather */}
-            <DayForecastWidget showWeekLink />
+            <DayForecastWidget
+              weather={weather}
+              weatherLoading={weatherLoading}
+              weatherError={weatherError}
+              showWeekLink
+            />
 
             {/* Secondary Owners */}
             <div

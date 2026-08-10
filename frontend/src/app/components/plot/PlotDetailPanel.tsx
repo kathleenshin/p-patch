@@ -17,8 +17,8 @@ export function PlotDetailPanel({
   hideOwnerNames?: boolean;
 }) {
   const col = colByState[plot.state];
-  const isMine = plot.state === "mine";
-  const isAvailable = plot.state === "available";
+  const isMine = plot.isMine;
+  const isAvailable = !plot.isOccupied;
   const showOwner = !hideOwnerNames && Boolean(plot.owner);
 
   return (
@@ -71,11 +71,11 @@ export function PlotDetailPanel({
             : `0.0938rem solid ${col.border}`,
         }}
       >
-        {(plot.state === "active" || plot.state === "mine") && (
+        {plot.isOccupied && (
           <PlantIcon size={14} />
         )}
 
-        {plot.state === "help-needed" && (
+        {(plot.state === "help-active" || plot.state === "help-pending") && (
           <AlertTriangle
             size={12}
             color={col.text}

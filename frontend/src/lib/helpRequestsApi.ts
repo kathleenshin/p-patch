@@ -7,6 +7,8 @@ export interface HelpRequest {
   status: string;
   priority: string;
   category: string;
+  garden: number;
+  plot: number | null;
   assigned_to: number | null;
   created_by: number | null;
   due_date: string | null;
@@ -19,11 +21,13 @@ export interface UserOption {
   last_name?: string;
 }
 
-export async function fetchHelpRequests(): Promise<HelpRequest[]> {
-  return apiFetch<HelpRequest[]>('/api/help-requests/');
+export async function fetchHelpRequests(accessToken: string): Promise<HelpRequest[]> {
+  return apiFetch<HelpRequest[]>('/api/help-requests/', {
+    token: accessToken,
+  });
 }
 
-export async function createHelpRequest(payload: {
+export async function createHelpRequest(accessToken: string, payload: {
   title: string;
   description: string;
   priority: string;
@@ -31,23 +35,31 @@ export async function createHelpRequest(payload: {
   due_date: string | null;
   assigned_to: number | null;
   garden: number;
+  plot?: number | null;
 }): Promise<HelpRequest> {
   return apiFetch<HelpRequest>('/api/help-requests/', {
     method: 'POST',
+    token: accessToken,
     body: payload,
   });
 }
 
-export async function updateHelpRequest(id: number, payload: Partial<HelpRequest> & { status?: string }): Promise<HelpRequest> {
+export async function updateHelpRequest(
+  accessToken: string,
+  id: number,
+  payload: Partial<HelpRequest> & { status?: string },
+): Promise<HelpRequest> {
   return apiFetch<HelpRequest>(`/api/help-requests/${id}/`, {
     method: 'PATCH',
+    token: accessToken,
     body: payload,
   });
 }
 
-export async function deleteHelpRequest(id: number): Promise<void> {
+export async function deleteHelpRequest(accessToken: string, id: number): Promise<void> {
   await apiFetch<void>(`/api/help-requests/${id}/`, {
     method: 'DELETE',
+    token: accessToken,
   });
 }
 

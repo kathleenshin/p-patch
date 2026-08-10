@@ -12,6 +12,7 @@ class PlotSerializer(serializers.ModelSerializer):
     )
     owners = serializers.SerializerMethodField()
     has_open_help_request = serializers.SerializerMethodField()
+    help_status = serializers.SerializerMethodField()
     is_mine = serializers.SerializerMethodField()
 
     class Meta:
@@ -24,6 +25,7 @@ class PlotSerializer(serializers.ModelSerializer):
             "is_active",
             "owners",
             "has_open_help_request",
+            "help_status",
             "is_mine",
         ]
         read_only_fields = [
@@ -31,6 +33,7 @@ class PlotSerializer(serializers.ModelSerializer):
             "garden_name",
             "owners",
             "has_open_help_request",
+            "help_status",
             "is_mine",
         ]
 
@@ -82,6 +85,27 @@ class PlotSerializer(serializers.ModelSerializer):
             help_request.status != HelpRequest.Status.DONE
             for help_request in help_requests
         )
+
+    def get_help_status(self, plot):
+        """Return the highest-priority open help status for the plot."""
+
+        help_requests = self._get_related_items(plot, "help_requests")
+
+        has_active = any(
+            help_request.status == HelpRequest.Status.ACTIVE
+            for help_request in help_requests
+        )
+        if has_active:
+            return HelpRequest.Status.ACTIVE
+
+        has_pending = any(
+            help_request.status == HelpRequest.Status.PENDING
+            for help_request in help_requests
+        )
+        if has_pending:
+            return HelpRequest.Status.PENDING
+
+        return None
 
     def get_is_mine(self, plot):
         """Return whether the current user actively stewards this plot."""

@@ -1,7 +1,8 @@
 import { useEffect, useState, type CSSProperties } from "react";
-import { Plus, Filter, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import { useAuth } from "../auth/AuthContext";
+import { invalidatePlotsCache, usePlots } from "../hooks/usePlots";
 import taskIcon from "../../imports/TaskPageIcon.jpg";
 import {
   createHelpRequest,
@@ -38,6 +39,7 @@ const initialColumns: Column[] = [
 
 export function TaskScreen() {
   const { accessToken } = useAuth();
+  const { plots } = usePlots();
   const [columns] = useState(initialColumns);
   const [showNew, setShowNew] = useState(false);
   const [title, setTitle] = useState("");
@@ -60,6 +62,8 @@ export function TaskScreen() {
   const [editDueDate, setEditDueDate] = useState("");
   const [assignee, setAssignee] = useState<number | "">("" );
   const [editAssignee, setEditAssignee] = useState<number | "">("" );
+  const [plotSelection, setPlotSelection] = useState("");
+  const [editPlotSelection, setEditPlotSelection] = useState("");
   const [users, setUsers] = useState<UserOption[]>([]);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const colBg: Record<string, string> = { active: "#FFF4F0", pending: "#FFFBEE", done: "#F2FAF2" };
@@ -75,8 +79,13 @@ export function TaskScreen() {
   };
 
   const loadRequests = async () => {
+    if (!accessToken) {
+      setRequests([]);
+      return;
+    }
+
     try {
-      const data = await fetchHelpRequests();
+      const data = await fetchHelpRequests(accessToken);
       setRequests(data);
     } catch {
       setError("Unable to load help requests.");
@@ -111,21 +120,62 @@ export function TaskScreen() {
     return displayName || user.email;
   };
 
+  const getPlotNumberLabel = (plotId: number | null | undefined) => {
+    if (!plotId) {
+      return "No Plot";
+    }
+
+    const plot = plots.find((item) => item.id === plotId);
+    return plot ? `Plot #${plot.plot_number}` : `Plot #${plotId}`;
+  };
+
+  const plotOptions = [...plots]
+    .sort((a, b) => {
+      const gardenCompare = a.garden_name.localeCompare(b.garden_name);
+      if (gardenCompare !== 0) {
+        return gardenCompare;
+      }
+
+      return a.plot_number.localeCompare(b.plot_number, undefined, {
+        numeric: true,
+      });
+    })
+    .map((plot) => ({
+      value: `${plot.id}`,
+      gardenId: plot.garden,
+      label: `Plot #${plot.plot_number} (${plot.garden_name})`,
+    }));
+
+  const getSelectedPlotOption = (value: string) =>
+    plotOptions.find((option) => option.value === value) ?? null;
+
   useEffect(() => {
     void loadRequests();
     void loadUsers();
   }, [accessToken]);
 
   const handleCreateRequest = async () => {
+    if (!accessToken) {
+      setError("Please log in to create help requests.");
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const data = await createHelpRequest({
+      const selectedPlot = getSelectedPlotOption(plotSelection);
+      if (!selectedPlot) {
+        setError("Select a plot to create a help request.");
+        return;
+      }
+
+      const data = await createHelpRequest(accessToken, {
         title,
         description,
-        garden: 1,
+        garden: selectedPlot.gardenId,
+        plot: Number(selectedPlot.value),
         priority,
         category,
         due_date: dueDate || null,
@@ -133,12 +183,14 @@ export function TaskScreen() {
       });
 
       setRequests((current) => [data, ...current]);
+      invalidatePlotsCache();
       setTitle("");
       setDescription("");
       setPriority("medium");
       setCategory("other");
       setDueDate("");
       setAssignee("");
+      setPlotSelection("");
       setShowNew(false);
       setSuccess("Help request created.");
     } catch (err) {
@@ -149,13 +201,19 @@ export function TaskScreen() {
   };
 
   const handleStatusChange = async (requestId: number, nextStatus: string) => {
+    if (!accessToken) {
+      setError("Please log in to update help requests.");
+      return;
+    }
+
     setStatusChangingId(requestId);
     setError(null);
     setSuccess(null);
 
     try {
-      const data = await updateHelpRequest(requestId, { status: nextStatus });
+      const data = await updateHelpRequest(accessToken, requestId, { status: nextStatus });
       setRequests((current) => current.map((request) => (request.id === requestId ? data : request)));
+      invalidatePlotsCache();
       setSuccess("Help request updated.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to update the help request.");
@@ -165,13 +223,19 @@ export function TaskScreen() {
   };
 
   const handleDeleteRequest = async (requestId: number) => {
+    if (!accessToken) {
+      setError("Please log in to delete help requests.");
+      return;
+    }
+
     setDeletingId(requestId);
     setError(null);
     setSuccess(null);
 
     try {
-      await deleteHelpRequest(requestId);
+      await deleteHelpRequest(accessToken, requestId);
       setRequests((current) => current.filter((request) => request.id !== requestId));
+      invalidatePlotsCache();
       setSuccess("Help request deleted.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to delete the help request.");
@@ -189,6 +253,7 @@ export function TaskScreen() {
     setEditCategory(request.category);
     setEditDueDate(request.due_date ?? "");
     setEditAssignee(request.assigned_to ?? "");
+    setEditPlotSelection(request.plot ? String(request.plot) : "");
     setError(null);
     setSuccess(null);
   };
@@ -198,12 +263,28 @@ export function TaskScreen() {
       return;
     }
 
+    if (!accessToken) {
+      setError("Please log in to update help requests.");
+      return;
+    }
+
     setIsSavingDetails(true);
     setError(null);
     setSuccess(null);
 
     try {
-      const data = await updateHelpRequest(selectedRequest.id, {
+      const selectedPlot = getSelectedPlotOption(editPlotSelection);
+      const originalPlotSelection = selectedRequest.plot
+        ? String(selectedRequest.plot)
+        : "";
+      const plotSelectionChanged = editPlotSelection !== originalPlotSelection;
+
+      if (plotSelectionChanged && editPlotSelection !== "" && !selectedPlot) {
+        setError("Selected plot is no longer available. Please reselect a plot.");
+        return;
+      }
+
+      const payload: Partial<HelpRequest> & { status?: string } = {
         title: editTitle,
         description: editDescription,
         status: editStatus,
@@ -211,9 +292,22 @@ export function TaskScreen() {
         category: editCategory,
         due_date: editDueDate || null,
         assigned_to: editAssignee || null,
-      });
+      };
+
+      if (plotSelectionChanged) {
+        if (editPlotSelection === "") {
+          // Only clear the plot when user explicitly picks "No plot".
+          payload.plot = null;
+        } else if (selectedPlot) {
+          payload.plot = Number(selectedPlot.value);
+          payload.garden = selectedPlot.gardenId;
+        }
+      }
+
+      const data = await updateHelpRequest(accessToken, selectedRequest.id, payload);
 
       setRequests((current) => current.map((request) => (request.id === selectedRequest.id ? data : request)));
+      invalidatePlotsCache();
       setSelectedRequest(null);
       setSuccess("Help request updated.");
       void loadRequests();
@@ -237,12 +331,6 @@ export function TaskScreen() {
             />
             <h1 style={{ ...serif, fontSize: "1.5rem", fontWeight: 700, color: C.brown, margin: 0 }}>Task Board</h1>
           </div>
-          <button style={{ background: C.card, border: `0.0625rem solid ${C.border}`, borderRadius: "0.625rem",
-            padding: "0.5rem 0.875rem", fontSize: "0.8rem", fontWeight: 700, color: C.brownMid,
-            cursor: "pointer", fontFamily: "'Nunito', sans-serif",
-            display: "flex", alignItems: "center", gap: "0.3125rem" }}>
-            <Filter size={13} /> Filter: All Tasks
-          </button>
         </div>
         {error && (
           <div style={{ marginBottom: "0.875rem", color: C.terra, fontWeight: 700, fontSize: "0.8rem" }}>{error}</div>
@@ -313,6 +401,9 @@ export function TaskScreen() {
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem", marginBottom: "0.625rem" }}>
                           <div style={{ fontSize: "0.69rem", color: C.muted }}>
                             Assigned to: {getUserLabel(request.assigned_to, "Unassigned")}
+                          </div>
+                          <div style={{ fontSize: "0.69rem", color: C.muted }}>
+                            {getPlotNumberLabel(request.plot)}
                           </div>
                         </div>
                       );
@@ -451,6 +542,21 @@ export function TaskScreen() {
                   })}
                 </select>
               </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Plot number (optional)</label>
+                <select
+                  value={editPlotSelection}
+                  onChange={(event) => setEditPlotSelection(event.target.value)}
+                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
+                >
+                  <option value="">No plot</option>
+                  {plotOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                 <button onClick={handleUpdateRequestDetails} disabled={isSavingDetails}
                   style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
@@ -554,6 +660,21 @@ export function TaskScreen() {
                       </option>
                     );
                   })}
+                </select>
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Plot number (optional)</label>
+                <select
+                  value={plotSelection}
+                  onChange={(event) => setPlotSelection(event.target.value)}
+                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
+                >
+                  <option value="">No plot</option>
+                  {plotOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
                 </select>
               </div>
               <button onClick={handleCreateRequest} disabled={isSubmitting}
