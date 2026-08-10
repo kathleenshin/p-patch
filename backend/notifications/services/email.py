@@ -7,11 +7,11 @@ from .notification_service import NotificationService
 
 
 def send_email_notification(
-    *,
-    recipients: Sequence[str] | None,
-    subject: str,
-    message: str,
-    notification_service: NotificationService | None = None,
+        *,
+        recipients: Sequence[str] | None,
+        subject: str,
+        message: str,
+        notification_service: NotificationService | None = None,
 ) -> EmailDeliveryResult:
     """Compatibility wrapper for existing callers that expect a mail helper."""
 
