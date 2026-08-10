@@ -7,6 +7,9 @@ from users.permissions import IsApproved
 from notifications.services.task_notifications import notify_urgent_help_request_created
 from notifications.services.email_provider import EmailDeliveryError
 import logging
+from datetime import timedelta
+from django.db.models import Q
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +23,33 @@ class HelpRequestAssigneeListView(generics.ListAPIView):
 
 
 class HelpRequestViewSet(viewsets.ModelViewSet):
-    queryset = HelpRequest.objects.select_related("garden", "plot", "created_by", "assigned_to").all()
     serializer_class = HelpRequestSerializer
     permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        cutoff = timezone.now() - timedelta(days=14)
+
+        claimed_requests = Q(
+            assigned_to__isnull=False,
+        )
+
+        recent_unclaimed_requests = Q(
+            assigned_to__isnull=True,
+            created_at__gte=cutoff,
+        )
+
+        return (
+            HelpRequest.objects.select_related(
+                "garden",
+                "plot",
+                "created_by",
+                "assigned_to",
+            )
+            .filter(
+                claimed_requests
+                | recent_unclaimed_requests
+            )
+        )
 
     def perform_create(self, serializer):
         if self.request.user.is_authenticated:
@@ -33,6 +60,7 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
         if help_request.priority == HelpRequest.Priority.HIGH:
             try:
                 notify_urgent_help_request_created(help_request)
+            # Log the exception but continue without interrupting request creation
             except EmailDeliveryError:
                 logger.exception(
                     "Failed to send urgent help request notification %s",
