@@ -66,9 +66,6 @@ export function TaskScreen() {
   const [editPlotSelection, setEditPlotSelection] = useState("");
   const [users, setUsers] = useState<UserOption[]>([]);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
-  const currentGardenId = plots.find((plot) => plot.is_mine && plot.is_active)?.garden
-    ?? plots.find((plot) => plot.is_mine)?.garden
-    ?? 1;
   const colBg: Record<string, string> = { active: "#FFF4F0", pending: "#FFFBEE", done: "#F2FAF2" };
   const requestColumnMap: Record<string, string> = {
     active: "active",

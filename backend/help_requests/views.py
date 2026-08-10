@@ -62,7 +62,9 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        help_request = serializer.save()
+        help_request = serializer.save(
+            created_by=self.request.user
+        )
 
         if help_request.priority == HelpRequest.Priority.HIGH:
             try:

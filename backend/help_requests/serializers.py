@@ -134,14 +134,6 @@ class HelpRequestSerializer(serializers.ModelSerializer):
 
         return attrs
 
-    def create(self, validated_data):
-        request = self.context.get("request")
-
-        if request and request.user.is_authenticated:
-            validated_data["created_by"] = request.user
-
-        return super().create(validated_data)
-
 
 class HelpRequestAssigneeSerializer(serializers.ModelSerializer):
     class Meta:
