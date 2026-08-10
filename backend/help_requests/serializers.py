@@ -25,12 +25,6 @@ class HelpRequestSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
 
-    assigned_to = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(),
-        required=False,
-        allow_null=True,
-    )
-
     class Meta:
         model = HelpRequest
         fields = [
@@ -53,6 +47,9 @@ class HelpRequestSerializer(serializers.ModelSerializer):
             "id",
             "created_by",
             "created_at",
+            "status",
+            "assigned_to",
+            "completed_at",
         ]
 
     def validate(self, attrs):

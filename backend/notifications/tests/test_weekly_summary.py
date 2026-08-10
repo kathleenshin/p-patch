@@ -6,12 +6,15 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from help_requests.models import HelpRequest
 from notifications.services.email_provider import EmailDeliveryResult
 from notifications.services.weekly_summary import (
+    get_weekly_help_requests,
     notify_weekly_summary_for_garden,
 )
 from notifications.tests.fixtures import (
     create_garden,
+    create_help_request,
     create_membership,
     create_plot,
     create_user,
@@ -256,6 +259,101 @@ class WeeklySummaryServiceTests(TestCase):
         self.assertEqual(
             kwargs["recipients"],
             [],
+        )
+
+    def test_unclaimed_help_request_is_included_in_weekly_summary(self):
+        user = create_user(
+            username="requester",
+            email="requester@example.com",
+        )
+
+        help_request = create_help_request(
+            garden=self.garden,
+            created_by=user,
+            status=HelpRequest.Status.ACTIVE,
+            priority=HelpRequest.Priority.MEDIUM,
+            assigned_to=None,
+        )
+
+        help_requests = get_weekly_help_requests(
+            self.garden,
+        )
+
+        self.assertIn(
+            help_request,
+            help_requests,
+        )
+
+    def test_claimed_help_request_is_excluded_from_weekly_summary(self):
+        requester = create_user(
+            username="requester",
+            email="requester@example.com",
+        )
+        claimant = create_user(
+            username="claimant",
+            email="claimant@example.com",
+        )
+
+        help_request = create_help_request(
+            garden=self.garden,
+            created_by=requester,
+            priority=HelpRequest.Priority.MEDIUM,
+            status=HelpRequest.Status.PENDING,
+            assigned_to=claimant,
+        )
+
+        help_requests = get_weekly_help_requests(
+            self.garden,
+        )
+
+        self.assertNotIn(
+            help_request,
+            help_requests,
+        )
+
+    def test_unclaimed_again_help_request_returns_to_weekly_summary(self):
+        requester = create_user(
+            username="requester",
+            email="requester@example.com",
+        )
+        claimant = create_user(
+            username="claimant",
+            email="claimant@example.com",
+        )
+
+        help_request = create_help_request(
+            garden=self.garden,
+            created_by=requester,
+            priority=HelpRequest.Priority.MEDIUM,
+            status=HelpRequest.Status.PENDING,
+            assigned_to=claimant,
+        )
+
+        claimed_requests = get_weekly_help_requests(
+            self.garden,
+        )
+
+        self.assertNotIn(
+            help_request,
+            claimed_requests,
+        )
+
+        help_request.assigned_to = None
+        help_request.status = HelpRequest.Status.ACTIVE
+        help_request.save(
+            update_fields=[
+                "assigned_to",
+                "status",
+            ]
+        )
+
+        unclaimed_requests = get_weekly_help_requests(
+            self.garden,
+        )
+
+        self.assertIn(
+            help_request,
+            unclaimed_requests,
         )
 
 
