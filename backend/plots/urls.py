@@ -5,6 +5,8 @@ from .views import (
     PlotListCreateView,
     PlotNoteDetailView,
     PlotNoteListCreateView,
+    PlotPhotoDetailView,
+    PlotPhotoListCreateView,
 )
 
 
@@ -28,5 +30,15 @@ urlpatterns = [
         "plot-notes/<int:pk>/",
         PlotNoteDetailView.as_view(),
         name="plot-note-detail",
+    ),
+    path(
+        "plot-photos/",
+        PlotPhotoListCreateView.as_view(),
+        name="plot-photo-list-create",
+    ),
+    path(
+        "plot-photos/<int:pk>/",
+        PlotPhotoDetailView.as_view(),
+        name="plot-photo-detail",
     ),
 ]

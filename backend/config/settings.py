@@ -155,9 +155,6 @@ AWS_S3_REGION_NAME = os.getenv(
 # Bucket that holds uploaded plot photos and other media files.
 AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "")
 
-# Optional CloudFront / custom domain; leave empty to use the default S3 URL.
-AWS_S3_CUSTOM_DOMAIN = os.getenv("AWS_S3_CUSTOM_DOMAIN", "").strip()
-
 # Keep original filenames unique enough by never overwriting same-key objects.
 AWS_S3_FILE_OVERWRITE = False
 
@@ -214,15 +211,10 @@ MEDIA_ROOT = BASE_DIR / "media"
 if USE_S3:
     # Production/staging: Django FileField/ImageField writes go to S3 via django-storages.
     # Credentials come from AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (same as SES).
-    if AWS_S3_CUSTOM_DOMAIN:
-        # Prefer a CDN/custom domain when configured.
-        MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/{AWS_LOCATION}/"
-    else:
-        # Default virtual-hosted–style S3 URL for the configured region/bucket.
-        MEDIA_URL = (
-            f"https://{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}"
-            f".amazonaws.com/{AWS_LOCATION}/"
-        )
+    MEDIA_URL = (
+        f"https://{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}"
+        f".amazonaws.com/{AWS_LOCATION}/"
+    )
 
     STORAGES = {
         "default": {

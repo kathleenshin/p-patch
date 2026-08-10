@@ -109,6 +109,11 @@ class BasePlotAPITestCase(BasePlotTestCase):
             kwargs={"pk": 999999},
         )
 
+        # PlotPhoto API fixtures
+        cls.plot_photo_list_create_url = reverse(
+            "plot-photo-list-create"
+        )
+
     def setUp(self):
         self.client = APIClient()
         self.client.force_authenticate(user=self.user_one)
