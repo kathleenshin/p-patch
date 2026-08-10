@@ -9,6 +9,9 @@ DATABASES = {
     }
 }
 
+# Never send real emails during tests.
+EMAIL_PROVIDER = "console"
+
 # Auth suites register/resend many times from one IP; keep production rates elsewhere.
 REST_FRAMEWORK = {
     **REST_FRAMEWORK,  # noqa: F405

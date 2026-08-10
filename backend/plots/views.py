@@ -1,22 +1,37 @@
+from django.db.models import Prefetch, Q
 from rest_framework import generics
 from rest_framework.exceptions import ValidationError
-from django.db.models import Q
 
-from .models import Plot, PlotNote
+from .models import Plot, PlotNote, PlotOwnership
 from .serializers import PlotNoteSerializer, PlotSerializer
+
+
+plot_queryset = (
+    Plot.objects
+    .select_related("garden")
+    .prefetch_related(
+        Prefetch(
+            "ownerships",
+            queryset=PlotOwnership.objects.select_related("user"),
+        ),
+        "help_requests",
+    )
+)
 
 
 # TODO: Add garden-level authorization once the shared permissions
 # implementation is finalized. For now, these endpoints rely on the
 # project's global authentication settings.
+
 class PlotListCreateView(generics.ListCreateAPIView):
-    queryset = Plot.objects.select_related("garden").all()
+    queryset = plot_queryset
     serializer_class = PlotSerializer
 
 
 # Does not support Delete for MVP
+
 class PlotDetailView(generics.RetrieveUpdateAPIView):
-    queryset = Plot.objects.select_related("garden").all()
+    queryset = plot_queryset
     serializer_class = PlotSerializer
 
 
@@ -26,6 +41,7 @@ class PlotDetailView(generics.RetrieveUpdateAPIView):
 # - active plot owner or garden admin may create a note
 # - note author or garden admin may update or delete a note
 # - unauthenticated users receive 401
+
 class PlotNoteListCreateView(generics.ListCreateAPIView):
     serializer_class = PlotNoteSerializer
 
@@ -69,7 +85,6 @@ class PlotNoteListCreateView(generics.ListCreateAPIView):
             )
         ).distinct()
 
-
     def get_queryset(self):
         plot_id = self._validated_plot_id()
 
@@ -87,6 +102,7 @@ class PlotNoteListCreateView(generics.ListCreateAPIView):
 
 # TODO: Restrict updates and deletion to the note author or a garden admin
 # once the shared permissions implementation is available.
+
 class PlotNoteDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = PlotNoteSerializer
 
