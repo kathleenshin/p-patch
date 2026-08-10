@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from "react";
 import {
   ChevronRight,
   Plus,
@@ -11,8 +11,16 @@ import {
 import { C, serif, sans, mono, linkStyle } from "../theme";
 import type { Screen } from "../types";
 import { DayForecastWidget } from "../components/weather/DayForecastWidget";
+import { PlotPhotoCropModal } from "../components/plot/PlotPhotoCropModal";
 import { usePlots } from "../hooks/usePlots";
 import { usePlotNotes } from "../hooks/usePlotNotes";
+import { useAuth } from "../auth/AuthContext";
+import {
+  fetchPlotPhotos,
+  uploadPlotPhoto,
+  type PlotPhotoRecord,
+} from "@/api/plots";
+import { useWeather } from "../hooks/useWeather";
 import plotBedIcon from "../../imports/PlotPageIcon.jpg";
 import plotPhoto from "../../imports/PlotHeroImage.jpg";
 
@@ -23,9 +31,36 @@ export function PlotScreen({
   setScreen: (s: Screen) => void;
   selectedPlotId?: number | null;
 }) {
+  type NoteVisibility =
+    | "this_plot"
+    | "all_plots_in_garden"
+    | "garden_members";
+
   const [activeTab, setActiveTab] = useState<
     "overview" | "notes" | "gallery" | "history"
   >("overview");
+
+  // Remote gallery photos (local /media or S3 URLs from the API).
+  const [photos, setPhotos] = useState<PlotPhotoRecord[]>([]);
+  const [photoError, setPhotoError] = useState<string | null>(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Object URL + original name for the crop modal (revoked on close).
+  const [cropSource, setCropSource] = useState<{
+    url: string;
+    fileName: string;
+  } | null>(null);
+
+  const { accessToken } = useAuth();
+  const [showNoteForm, setShowNoteForm] = useState(false);
+  const [newNoteContent, setNewNoteContent] = useState("");
+  const [newNoteVisibility, setNewNoteVisibility] =
+    useState<NoteVisibility>("this_plot");
+  const [noteSubmitting, setNoteSubmitting] = useState(false);
+  const [noteSubmitError, setNoteSubmitError] = useState<string | null>(
+    null
+  );
 
   const { plots, plotsLoading, plotsError } = usePlots();
 
@@ -43,7 +78,105 @@ export function PlotScreen({
     notes,
     notesLoading,
     notesError,
+    createNote,
   } = usePlotNotes(focusPlot?.id);
+  const { weather, weatherLoading, weatherError } = useWeather(
+    focusPlot?.garden ?? null,
+  );
+
+  // Prefer the newest uploaded photo for the hero; fall back to bundled art.
+  // Gallery of older photos is disabled for now — only the latest is kept in state.
+  const heroPhotoSrc = photos[0]?.image_url || plotPhoto;
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function loadPhotos() {
+      if (!focusPlot || !accessToken) {
+        setPhotos([]);
+        setPhotoError(null);
+        return;
+      }
+
+      try {
+        setPhotoError(null);
+        const data = await fetchPlotPhotos(focusPlot.id, accessToken);
+        if (!ignore) {
+          // Keep only the newest photo for the Overview hero (skip older history).
+          setPhotos(data[0] ? [data[0]] : []);
+        }
+      } catch (error) {
+        if (!ignore) {
+          setPhotos([]);
+          setPhotoError(
+            error instanceof Error
+              ? error.message
+              : "Unable to load plot photos.",
+          );
+        }
+      }
+    }
+
+    void loadPhotos();
+
+    return () => {
+      ignore = true;
+    };
+  }, [accessToken, focusPlot?.id]);
+
+  const closeCropModal = () => {
+    setCropSource((current) => {
+      if (current) URL.revokeObjectURL(current.url);
+      return null;
+    });
+  };
+
+  const handleUploadPhotoClick = () => {
+    if (!focusPlot || photoUploading || cropSource) return;
+    fileInputRef.current?.click();
+  };
+
+  // Open the fixed-aspect crop mask instead of uploading the raw file.
+  const handlePhotoSelected = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file || !focusPlot || !accessToken) return;
+
+    setPhotoError(null);
+    setCropSource({
+      url: URL.createObjectURL(file),
+      fileName: file.name,
+    });
+  };
+
+  // After the user confirms the 5:2 crop, upload the capped JPEG.
+  const handleCropConfirm = async (file: File) => {
+    if (!focusPlot || !accessToken) return;
+
+    try {
+      setPhotoUploading(true);
+      setPhotoError(null);
+      const uploaded = await uploadPlotPhoto(
+        focusPlot.id,
+        file,
+        accessToken,
+      );
+      // Replace hero with this upload only (do not keep older photos in UI state).
+      setPhotos([uploaded]);
+      setActiveTab("overview");
+      closeCropModal();
+    } catch (error) {
+      setPhotoError(
+        error instanceof Error
+          ? error.message
+          : "Unable to upload photo.",
+      );
+      throw error;
+    } finally {
+      setPhotoUploading(false);
+    }
+  };
 
   const primaryOwner =
     focusPlot?.owners.find((owner) => owner.is_primary) ??
@@ -72,7 +205,8 @@ export function PlotScreen({
   const tabs: { key: typeof activeTab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "notes", label: "Notes" },
-    { key: "gallery", label: "Gallery" },
+    // Gallery disabled: older uploads were view-only with no select/delete actions.
+    // { key: "gallery", label: "Gallery" },
     { key: "history", label: "History" },
   ];
 
@@ -99,7 +233,11 @@ export function PlotScreen({
 
   const quickActions = [
     { label: "Add Note", Icon: Plus },
-    { label: "Upload Photo", Icon: Plus },
+      {
+          label: photoUploading ? "Uploading…" : "Upload Photo",
+          Icon: Plus,
+          onClick: handleUploadPhotoClick,
+      },
     { label: "View Plot on Map", Icon: MapPin },
     { label: "Print Plot Summary", Icon: ArrowRight },
   ];
@@ -114,6 +252,42 @@ export function PlotScreen({
         return "Garden members";
       default:
         return visibility;
+    }
+  };
+
+  const resetNoteForm = () => {
+    setShowNoteForm(false);
+    setNewNoteContent("");
+    setNewNoteVisibility("this_plot");
+    setNoteSubmitError(null);
+  };
+
+  const handleSaveNote = async (
+    event: FormEvent<HTMLFormElement>
+  ) => {
+    event.preventDefault();
+
+    const trimmedContent = newNoteContent.trim();
+
+    if (!trimmedContent) {
+      setNoteSubmitError("Please enter note content before saving.");
+      return;
+    }
+
+    setNoteSubmitting(true);
+    setNoteSubmitError(null);
+
+    try {
+      await createNote(trimmedContent, newNoteVisibility);
+      resetNoteForm();
+    } catch (error) {
+      setNoteSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Unable to save note."
+      );
+    } finally {
+      setNoteSubmitting(false);
     }
   };
 
@@ -302,29 +476,50 @@ export function PlotScreen({
               </button>
             </div>
 
-            {/* Hero photo */}
+            {/* Hero photo — uploaded image when available, else bundled placeholder */}
             <div
               style={{
                 borderRadius: "0.875rem",
                 overflow: "hidden",
                 border: `0.0625rem solid ${C.border}`,
-                aspectRatio: "16/5",
+                aspectRatio: "5 / 2",
                 boxShadow:
                   "0 0.125rem 0.625rem rgba(44,31,20,0.08)",
               }}
             >
               <img
-                src={plotPhoto}
+                src={heroPhotoSrc}
                 alt="Garden plot"
                 style={{
                   width: "100%",
                   height: "100%",
                   objectFit: "cover",
-                  objectPosition: "center 40%",
+                  objectPosition: "center",
                   display: "block",
                 }}
               />
             </div>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              style={{ display: "none" }}
+              onChange={handlePhotoSelected}
+            />
+
+            {photoError ? (
+              <div
+                style={{
+                  fontSize: "0.75rem",
+                  color: C.terra,
+                  fontWeight: 600,
+                  ...sans,
+                }}
+              >
+                {photoError}
+              </div>
+            ) : null}
 
             {/* Tabs */}
             <div style={{ display: "flex", gap: 0 }}>
@@ -356,7 +551,69 @@ export function PlotScreen({
                 </button>
               ))}
             </div>
+
+            {/* Gallery tab disabled — older photos had no actions beyond viewing.
+            {activeTab === "gallery" ? (
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns:
+                    "repeat(auto-fill, minmax(9rem, 1fr))",
+                  gap: "0.75rem",
+                }}
+              >
+                {photos.length === 0 ? (
+                  <div
+                    style={{
+                      fontSize: "0.8rem",
+                      color: C.muted,
+                      ...sans,
+                    }}
+                  >
+                    No photos yet. Use Upload Photo to add one.
+                  </div>
+                ) : (
+                  photos.map((photo) => (
+                    <div
+                      key={photo.id}
+                      style={{
+                        borderRadius: "0.625rem",
+                        overflow: "hidden",
+                        border: `0.0625rem solid ${C.border}`,
+                        background: C.card,
+                      }}
+                    >
+                      <img
+                        src={photo.image_url}
+                        alt={photo.caption || "Plot photo"}
+                        style={{
+                          width: "100%",
+                          aspectRatio: "5 / 2",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                      {photo.caption ? (
+                        <div
+                          style={{
+                            padding: "0.375rem 0.5rem",
+                            fontSize: "0.68rem",
+                            color: C.brownMid,
+                            ...sans,
+                          }}
+                        >
+                          {photo.caption}
+                        </div>
+                      ) : null}
+                    </div>
+                  ))
+                )}
+              </div>
+            ) : null}
+            */}
+
             {/* Plot Info + Notes */}
+            {activeTab === "overview" || activeTab === "notes" ? (
             <div
               style={{
                 display: "grid",
@@ -458,8 +715,10 @@ export function PlotScreen({
                   </h3>
 
                   <button
-                    disabled
-                    title="Note creation is not connected yet"
+                    onClick={() => {
+                      setShowNoteForm((prev) => !prev);
+                      setNoteSubmitError(null);
+                    }}
                     style={{
                       background: C.sagePop,
                       color: C.sage,
@@ -468,8 +727,7 @@ export function PlotScreen({
                       padding: "0.1875rem 0.5625rem",
                       fontSize: "0.7rem",
                       fontWeight: 700,
-                      cursor: "not-allowed",
-                      opacity: 0.6,
+                      cursor: "pointer",
                       fontFamily: "'Nunito', sans-serif",
                       display: "flex",
                       alignItems: "center",
@@ -479,6 +737,163 @@ export function PlotScreen({
                     <Plus size={10} /> Add Note
                   </button>
                 </div>
+
+                {showNoteForm ? (
+                  <form
+                    onSubmit={handleSaveNote}
+                    style={{
+                      marginBottom: "0.75rem",
+                      padding: "0.75rem",
+                      background: C.cream,
+                      border: `0.0625rem solid ${C.border}`,
+                      borderRadius: "0.6875rem",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "0.5rem",
+                    }}
+                  >
+                    <textarea
+                      value={newNoteContent}
+                      onChange={(event) => {
+                        setNewNoteContent(event.target.value);
+                        if (noteSubmitError) {
+                          setNoteSubmitError(null);
+                        }
+                      }}
+                      placeholder="Write a note about this plot..."
+                      rows={4}
+                      style={{
+                        width: "100%",
+                        resize: "vertical",
+                        minHeight: "5rem",
+                        borderRadius: "0.5rem",
+                        border: `0.0625rem solid ${C.border}`,
+                        padding: "0.5rem 0.625rem",
+                        background: C.white,
+                        color: C.brown,
+                        fontSize: "0.8rem",
+                        lineHeight: 1.45,
+                        ...sans,
+                      }}
+                    />
+
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: "0.5rem",
+                        flexWrap: "wrap",
+                      }}
+                    >
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.375rem",
+                          color: C.brownMid,
+                          fontSize: "0.74rem",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Visibility
+                        <select
+                          value={newNoteVisibility}
+                          onChange={(event) =>
+                            setNewNoteVisibility(
+                              event.target
+                                .value as NoteVisibility
+                            )
+                          }
+                          style={{
+                            border: `0.0625rem solid ${C.border}`,
+                            borderRadius: "0.4375rem",
+                            padding: "0.25rem 0.375rem",
+                            background: C.white,
+                            color: C.brown,
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            ...sans,
+                          }}
+                        >
+                          <option value="this_plot">
+                            This plot
+                          </option>
+                          <option value="all_plots_in_garden">
+                            All plots in garden
+                          </option>
+                          <option value="garden_members">
+                            Garden members
+                          </option>
+                        </select>
+                      </label>
+
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.375rem",
+                        }}
+                      >
+                        <button
+                          type="submit"
+                          disabled={noteSubmitting}
+                          style={{
+                            background: C.sagePop,
+                            color: C.sage,
+                            border: `0.0625rem solid ${C.sageMid}`,
+                            borderRadius: "0.4375rem",
+                            padding: "0.25rem 0.625rem",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            cursor: noteSubmitting
+                              ? "not-allowed"
+                              : "pointer",
+                            opacity: noteSubmitting ? 0.7 : 1,
+                            fontFamily: "'Nunito', sans-serif",
+                          }}
+                        >
+                          {noteSubmitting
+                            ? "Saving..."
+                            : "Save"}
+                        </button>
+
+                        <button
+                          type="button"
+                          disabled={noteSubmitting}
+                          onClick={resetNoteForm}
+                          style={{
+                            background: C.white,
+                            color: C.brownMid,
+                            border: `0.0625rem solid ${C.border}`,
+                            borderRadius: "0.4375rem",
+                            padding: "0.25rem 0.625rem",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            cursor: noteSubmitting
+                              ? "not-allowed"
+                              : "pointer",
+                            opacity: noteSubmitting ? 0.7 : 1,
+                            fontFamily: "'Nunito', sans-serif",
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+
+                    {noteSubmitError ? (
+                      <div
+                        style={{
+                          color: C.terra,
+                          fontSize: "0.74rem",
+                        }}
+                      >
+                        {noteSubmitError}
+                      </div>
+                    ) : null}
+                  </form>
+                ) : null}
 
                 {notesLoading ? (
                   <div
@@ -580,6 +995,7 @@ export function PlotScreen({
                 )}
               </div>
             </div>
+            ) : null}
           </div>
 
           {/* RIGHT COLUMN */}
@@ -591,7 +1007,12 @@ export function PlotScreen({
             }}
           >
             {/* Weather */}
-            <DayForecastWidget showWeekLink />
+            <DayForecastWidget
+              weather={weather}
+              weatherLoading={weatherLoading}
+              weatherError={weatherError}
+              showWeekLink
+            />
 
             {/* Secondary Owners */}
             <div
@@ -725,15 +1146,18 @@ export function PlotScreen({
                   flexDirection: "column",
                 }}
               >
-                {quickActions.map(({ label, Icon }) => (
+                {quickActions.map(({ label, Icon, onClick }) => (
                   <button
                     key={label}
+                    type="button"
+                    onClick={onClick}
+                    disabled={label.startsWith("Uploading")}
                     style={{
                       background: "none",
                       border: "none",
                       padding: "0.3125rem 0",
                       textAlign: "left",
-                      cursor: "pointer",
+                      cursor: onClick ? "pointer" : "default",
                       color: C.sage,
                       fontSize: "0.73rem",
                       fontWeight: 600,
@@ -742,6 +1166,7 @@ export function PlotScreen({
                       alignItems: "center",
                       gap: "0.375rem",
                       borderBottom: `0.0625rem solid ${C.creamDark}`,
+                      opacity: label.startsWith("Uploading") ? 0.6 : 1,
                     }}
                   >
                     <Icon size={11} />
@@ -753,6 +1178,15 @@ export function PlotScreen({
           </div>
         </div>
       </div>
+
+      {cropSource ? (
+        <PlotPhotoCropModal
+          imageSrc={cropSource.url}
+          fileName={cropSource.fileName}
+          onCancel={closeCropModal}
+          onConfirm={handleCropConfirm}
+        />
+      ) : null}
     </div>
   );
 }

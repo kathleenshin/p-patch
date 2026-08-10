@@ -64,6 +64,8 @@ INSTALLED_APPS = [
     'rest_framework',
     'corsheaders',
     'rest_framework_simplejwt',
+    # django-storages provides the S3Boto3Storage backend used when USE_S3=True
+    'storages',
 
     # Local apps
     'users',
@@ -139,6 +141,32 @@ NOTIFICATIONS_AWS_REGION = os.getenv(
     "us-west-2",
 )
 
+# --- Media storage (local disk by default; AWS S3 when USE_S3=True) ---
+# Reuses the same AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY as SES.
+# boto3 reads those env vars automatically for both SES and S3 clients.
+USE_S3 = os.getenv("USE_S3", "False").lower() == "true"
+
+# Shared region for S3; defaults to the SES region so one account stays aligned.
+AWS_S3_REGION_NAME = os.getenv(
+    "AWS_S3_REGION_NAME",
+    os.getenv("AWS_SES_REGION", "us-west-2"),
+)
+
+# Bucket that holds uploaded plot photos and other media files.
+AWS_STORAGE_BUCKET_NAME = os.getenv("AWS_STORAGE_BUCKET_NAME", "")
+
+# Keep original filenames unique enough by never overwriting same-key objects.
+AWS_S3_FILE_OVERWRITE = False
+
+# Let the bucket policy own ACLs (private bucket + app-side auth recommended).
+AWS_DEFAULT_ACL = None
+
+# Signed URLs for private objects; set False only if the bucket/objects are public.
+AWS_QUERYSTRING_AUTH = os.getenv("AWS_QUERYSTRING_AUTH", "True").lower() == "true"
+
+# Object key prefix inside the bucket (keeps media separate from other assets).
+AWS_LOCATION = os.getenv("AWS_LOCATION", "media")
+
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
 
@@ -177,14 +205,37 @@ STATIC_URL = 'static/'
 
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
-STORAGES = {
-    "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
-    },
-    "staticfiles": {
-        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
-    },
-}
+# Local uploads land here when USE_S3 is false (DEBUG also serves them via urls.py).
+MEDIA_ROOT = BASE_DIR / "media"
+
+if USE_S3:
+    # Production/staging: Django FileField/ImageField writes go to S3 via django-storages.
+    # Credentials come from AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY (same as SES).
+    MEDIA_URL = (
+        f"https://{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}"
+        f".amazonaws.com/{AWS_LOCATION}/"
+    )
+
+    STORAGES = {
+        "default": {
+            "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
+else:
+    # Local/dev: keep uploads on disk so S3 is optional during development.
+    MEDIA_URL = "/media/"
+
+    STORAGES = {
+        "default": {
+            "BACKEND": "django.core.files.storage.FileSystemStorage",
+        },
+        "staticfiles": {
+            "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+        },
+    }
 
 # Local Vite dev servers (5173, 5174, 5175, etc.)
 CORS_ALLOWED_ORIGIN_REGEXES = _csv_env(
@@ -221,6 +272,7 @@ REST_FRAMEWORK = {
         "auth_resend_email": "3/hour",
     },
 }
+
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=60),

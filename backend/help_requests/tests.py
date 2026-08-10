@@ -26,6 +26,11 @@ class HelpRequestAPITests(APITestCase):
             password="password",
             is_approved=True,
         )
+        cls.pending_user = User.objects.create_user(
+            email="pending-api@example.com",
+            password="password",
+            is_approved=False,
+        )
 
         cls.garden = Garden.objects.create(name="Green Street Garden")
         cls.plot = Plot.objects.create(garden=cls.garden, plot_number="2")
@@ -129,8 +134,94 @@ class HelpRequestAPITests(APITestCase):
         self.assertEqual(response.data["title"], "Repair shed")
         self.assertEqual(response.data["created_by"], self.user.id)
 
-    def test_help_requests_can_be_crud_without_authentication(self):
+    def test_create_help_request_with_plot_number(self):
+        response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Need mulch",
+                "description": "Need help adding mulch before rain.",
+                "garden": self.garden.id,
+                "plot_number": self.plot.plot_number,
+                "priority": HelpRequest.Priority.MEDIUM,
+                "category": HelpRequest.Category.GARDENING,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["plot"], self.plot.id)
+
+    def test_create_help_request_rejects_unknown_plot_number(self):
+        response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Need tool",
+                "description": "Missing rake.",
+                "garden": self.garden.id,
+                "plot_number": "999",
+                "priority": HelpRequest.Priority.LOW,
+                "category": HelpRequest.Category.OTHER,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("plot_number", response.data)
+
+    def test_create_help_request_rejects_conflicting_plot_and_plot_number(self):
+        other_plot = Plot.objects.create(garden=self.garden, plot_number="3")
+
+        response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Fence help",
+                "description": "Fence repair help needed.",
+                "garden": self.garden.id,
+                "plot": other_plot.id,
+                "plot_number": self.plot.plot_number,
+                "priority": HelpRequest.Priority.HIGH,
+                "category": HelpRequest.Category.MAINTENANCE,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("plot", response.data)
+
+    def test_partial_update_help_request_plot_with_plot_number(self):
+        help_request = HelpRequest.objects.create(
+            title="Move compost",
+            description="Move compost to beds.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+        )
+        other_plot = Plot.objects.create(garden=self.garden, plot_number="7")
+
+        response = self.client.patch(
+            reverse("help-request-detail", kwargs={"pk": help_request.id}),
+            {
+                "plot_number": other_plot.plot_number,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["plot"], other_plot.id)
+
+    def test_help_requests_require_authentication(self):
+        help_request = HelpRequest.objects.create(
+            title="Repair fence",
+            description="Fix the loose fence near the main gate.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+        )
+
         self.client.credentials()
+
+        list_response = self.client.get(reverse("help-request-list"))
+        self.assertEqual(list_response.status_code, status.HTTP_401_UNAUTHORIZED)
 
         create_response = self.client.post(
             reverse("help-request-list"),
@@ -144,21 +235,63 @@ class HelpRequestAPITests(APITestCase):
             },
             format="json",
         )
-        self.assertEqual(create_response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create_response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-        created_id = create_response.data["id"]
-        detail_response = self.client.get(reverse("help-request-detail", kwargs={"pk": created_id}))
-        self.assertEqual(detail_response.status_code, status.HTTP_200_OK)
+        detail_response = self.client.get(reverse("help-request-detail", kwargs={"pk": help_request.id}))
+        self.assertEqual(detail_response.status_code, status.HTTP_401_UNAUTHORIZED)
 
         update_response = self.client.patch(
-            reverse("help-request-detail", kwargs={"pk": created_id}),
+            reverse("help-request-detail", kwargs={"pk": help_request.id}),
             {"status": HelpRequest.Status.PENDING},
             format="json",
         )
-        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(update_response.status_code, status.HTTP_401_UNAUTHORIZED)
 
-        delete_response = self.client.delete(reverse("help-request-detail", kwargs={"pk": created_id}))
-        self.assertEqual(delete_response.status_code, status.HTTP_204_NO_CONTENT)
+        delete_response = self.client.delete(reverse("help-request-detail", kwargs={"pk": help_request.id}))
+        self.assertEqual(delete_response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_help_requests_require_approved_user(self):
+        help_request = HelpRequest.objects.create(
+            title="Path cleanup",
+            description="Sweep debris near garden entrance.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+        )
+
+        self.client.credentials(
+            HTTP_AUTHORIZATION=f"Bearer {RefreshToken.for_user(self.pending_user).access_token}"
+        )
+
+        list_response = self.client.get(reverse("help-request-list"))
+        self.assertEqual(list_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        create_response = self.client.post(
+            reverse("help-request-list"),
+            {
+                "title": "Need shovels",
+                "description": "Need extra shovels for volunteers.",
+                "garden": self.garden.id,
+                "plot": self.plot.id,
+                "priority": HelpRequest.Priority.MEDIUM,
+                "category": HelpRequest.Category.OTHER,
+            },
+            format="json",
+        )
+        self.assertEqual(create_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        detail_response = self.client.get(reverse("help-request-detail", kwargs={"pk": help_request.id}))
+        self.assertEqual(detail_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        update_response = self.client.patch(
+            reverse("help-request-detail", kwargs={"pk": help_request.id}),
+            {"status": HelpRequest.Status.PENDING},
+            format="json",
+        )
+        self.assertEqual(update_response.status_code, status.HTTP_403_FORBIDDEN)
+
+        delete_response = self.client.delete(reverse("help-request-detail", kwargs={"pk": help_request.id}))
+        self.assertEqual(delete_response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_retrieve_update_and_delete_help_request(self):
         help_request = HelpRequest.objects.create(
@@ -387,43 +520,62 @@ class HelpRequestModelTests(TestCase):
             "Repair fence",
         )
 
-    # Mock the notification so tests don't send real emails
-    @patch("help_requests.views.notify_urgent_help_request")
-    def test_high_priority_help_request_sends_notification(self, mock_notify):
-        response = self.client.post(
-            reverse("help-request-list"),
-            {
-                "title": "Urgent watering",
-                "description": "Plants need water immediately.",
-                "garden": self.garden.id,
-                "priority": HelpRequest.Priority.HIGH,
-                "category": HelpRequest.Category.WATERING,
-            },
-            format="json",
-        )
+# Mock the notification so tests don't send real emails
+@patch("help_requests.views.notify_urgent_help_request")
+def test_high_priority_help_request_sends_notification(self, mock_notify):
+    self.client.force_authenticate(user=self.user)
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+    response = self.client.post(
+        reverse("help-request-list"),
+        {
+            "title": "Urgent watering",
+            "description": "Plants need water immediately.",
+            "garden": self.garden.id,
+            "priority": HelpRequest.Priority.HIGH,
+            "category": HelpRequest.Category.WATERING,
+        },
+        format="json",
+    )
 
-        help_request = HelpRequest.objects.get(id=response.data["id"])
-        mock_notify.assert_called_once_with(help_request)
+    self.assertEqual(
+        response.status_code,
+        status.HTTP_201_CREATED,
+    )
+
+    help_request = HelpRequest.objects.get(
+        id=response.data["id"],
+    )
+
+    mock_notify.assert_called_once_with(help_request)
+
+    self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+    help_request = HelpRequest.objects.get(id=response.data["id"])
+    mock_notify.assert_called_once_with(help_request)
 
 
-    @patch("help_requests.views.notify_urgent_help_request")
-    def test_medium_priority_help_request_does_not_send_notification(
-        self,
-        mock_notify,
-    ):
-        response = self.client.post(
-            reverse("help-request-list"),
-            {
-                "title": "Weeding help",
-                "description": "Need help weeding this week.",
-                "garden": self.garden.id,
-                "priority": HelpRequest.Priority.MEDIUM,
-                "category": HelpRequest.Category.GARDENING,
-            },
-            format="json",
-        )
+@patch("help_requests.views.notify_urgent_help_request")
+def test_medium_priority_help_request_does_not_send_notification(
+    self,
+    mock_notify,
+):
+    self.client.force_authenticate(user=self.user)
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        mock_notify.assert_not_called()
+    response = self.client.post(
+        reverse("help-request-list"),
+        {
+            "title": "Weeding help",
+            "description": "Need help weeding this week.",
+            "garden": self.garden.id,
+            "priority": HelpRequest.Priority.MEDIUM,
+            "category": HelpRequest.Category.GARDENING,
+        },
+        format="json",
+    )
+
+    self.assertEqual(
+        response.status_code,
+        status.HTTP_201_CREATED,
+    )
+
+    mock_notify.assert_not_called()

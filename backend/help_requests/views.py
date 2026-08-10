@@ -16,18 +16,54 @@ from .serializers import HelpRequestAssigneeSerializer, HelpRequestSerializer
 
 logger = logging.getLogger(__name__)
 
+from .models import HelpRequest
+from .serializers import (
+    HelpRequestAssigneeSerializer,
+    HelpRequestSerializer,
+)
+
+
+logger = logging.getLogger(__name__)
+
 
 class HelpRequestAssigneeListView(generics.ListAPIView):
     permission_classes = [IsApproved]
     serializer_class = HelpRequestAssigneeSerializer
 
     def get_queryset(self):
-        return User.objects.filter(is_approved=True).order_by("email")
+        return User.objects.filter(
+            is_approved=True
+        ).order_by("email")
 
 
 class HelpRequestViewSet(viewsets.ModelViewSet):
     serializer_class = HelpRequestSerializer
-    permission_classes = [permissions.AllowAny]
+    permission_classes = [IsApproved]
+
+    def get_queryset(self):
+        cutoff = timezone.now() - timedelta(days=14)
+
+        claimed_requests = Q(
+            assigned_to__isnull=False,
+        )
+
+        recent_unclaimed_requests = Q(
+            assigned_to__isnull=True,
+            created_at__gte=cutoff,
+        )
+
+        return (
+            HelpRequest.objects.select_related(
+                "garden",
+                "plot",
+                "created_by",
+                "assigned_to",
+            )
+            .filter(
+                claimed_requests
+                | recent_unclaimed_requests
+            )
+        )
 
     def get_queryset(self):
         cutoff = timezone.now() - timedelta(days=14)
@@ -55,10 +91,7 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
         )
 
     def perform_create(self, serializer):
-        if self.request.user.is_authenticated:
-            help_request = serializer.save(created_by=self.request.user)
-        else:
-            help_request = serializer.save()
+        help_request = serializer.save()
 
         if help_request.priority == HelpRequest.Priority.HIGH:
             try:

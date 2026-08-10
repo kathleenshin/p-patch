@@ -341,3 +341,45 @@ class PlotNote(models.Model):
             f"Note by {self.author.username} "
             f"on Plot {self.plot.plot_number}"
         )
+
+
+def plot_photo_upload_to(instance, filename):
+    """
+    Build a stable storage key for a plot photo.
+
+    Local: media/plots/<plot_id>/<filename>
+    S3 (with AWS_LOCATION=media): media/plots/<plot_id>/<filename>
+    """
+    return f"plots/{instance.plot_id}/{filename}"
+
+
+class PlotPhoto(models.Model):
+    """
+    User-uploaded picture attached to a garden plot.
+
+    ImageField uses Django's default storage (local media/ or S3 when USE_S3=True).
+    """
+
+    plot = models.ForeignKey(
+        Plot,
+        on_delete=models.CASCADE,
+        related_name="photos",
+    )
+
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="plot_photos",
+    )
+
+    image = models.ImageField(upload_to=plot_photo_upload_to)
+
+    caption = models.CharField(max_length=255, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"Photo for Plot {self.plot.plot_number} ({self.pk})"

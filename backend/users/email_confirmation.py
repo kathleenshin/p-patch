@@ -2,8 +2,9 @@ from django.conf import settings
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
-# Shared outbound mail path (SES/console); keep auth off raw send_mail.
-from notifications.services.email import send_email_notification
+# Shared outbound mail path (console/SES); keep auth off raw send_mail.
+from notifications.services.email_provider import EmailDeliveryResult
+from notifications.services.notification_service import NotificationService
 
 from .tokens import email_confirmation_token
 
@@ -15,8 +16,8 @@ def build_confirmation_link(user) -> str:
     return f"{frontend}/?confirm_email=1&uid={uid}&token={token}"
 
 
-def send_confirmation_email(user) -> int:
-    """Build confirm content in auth; deliver via notifications (SES-ready)."""
+def send_confirmation_email(user) -> EmailDeliveryResult:
+    """Build confirm content in auth; deliver via NotificationService."""
     link = build_confirmation_link(user)
     subject = "Confirm your Judkins Park P-Patch account"
     message = (
@@ -25,8 +26,9 @@ def send_confirmation_email(user) -> int:
         f"{link}\n\n"
         "If you did not create an account, you can ignore this message."
     )
-    # Hand off delivery so SES config stays centralized in notifications.
-    return send_email_notification(
+    # Same path as help-request notify: console locally, SES when configured.
+    service = NotificationService.from_settings()
+    return service.send_email(
         recipients=[user.email],
         subject=subject,
         message=message,

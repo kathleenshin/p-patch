@@ -2,7 +2,7 @@ from rest_framework import serializers
 
 from help_requests.models import HelpRequest
 
-from .models import Plot, PlotNote
+from .models import Plot, PlotNote, PlotPhoto
 
 
 class PlotSerializer(serializers.ModelSerializer):
@@ -12,6 +12,7 @@ class PlotSerializer(serializers.ModelSerializer):
     )
     owners = serializers.SerializerMethodField()
     has_open_help_request = serializers.SerializerMethodField()
+    help_status = serializers.SerializerMethodField()
     is_mine = serializers.SerializerMethodField()
 
     class Meta:
@@ -24,6 +25,7 @@ class PlotSerializer(serializers.ModelSerializer):
             "is_active",
             "owners",
             "has_open_help_request",
+            "help_status",
             "is_mine",
         ]
         read_only_fields = [
@@ -31,6 +33,7 @@ class PlotSerializer(serializers.ModelSerializer):
             "garden_name",
             "owners",
             "has_open_help_request",
+            "help_status",
             "is_mine",
         ]
 
@@ -83,6 +86,27 @@ class PlotSerializer(serializers.ModelSerializer):
             for help_request in help_requests
         )
 
+    def get_help_status(self, plot):
+        """Return the highest-priority open help status for the plot."""
+
+        help_requests = self._get_related_items(plot, "help_requests")
+
+        has_active = any(
+            help_request.status == HelpRequest.Status.ACTIVE
+            for help_request in help_requests
+        )
+        if has_active:
+            return HelpRequest.Status.ACTIVE
+
+        has_pending = any(
+            help_request.status == HelpRequest.Status.PENDING
+            for help_request in help_requests
+        )
+        if has_pending:
+            return HelpRequest.Status.PENDING
+
+        return None
+
     def get_is_mine(self, plot):
         """Return whether the current user actively stewards this plot."""
 
@@ -117,3 +141,48 @@ class PlotNoteSerializer(serializers.ModelSerializer):
             "author",
             "created_at",
         ]
+
+
+class PlotPhotoSerializer(serializers.ModelSerializer):
+    """
+    Multipart upload serializer for plot pictures.
+
+    Clients POST multipart/form-data with `plot`, `image`, and optional `caption`.
+    `image_url` is a local /media/... URL or an S3 URL depending on USE_S3.
+    """
+
+    uploaded_by = serializers.StringRelatedField(read_only=True)
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = PlotPhoto
+        fields = [
+            "id",
+            "plot",
+            "uploaded_by",
+            "image",
+            "image_url",
+            "caption",
+            "created_at",
+        ]
+        read_only_fields = [
+            "id",
+            "uploaded_by",
+            "image_url",
+            "created_at",
+        ]
+
+    def get_image_url(self, photo):
+        """Return the storage-backed URL for the uploaded image."""
+
+        if not photo.image:
+            return None
+
+        request = self.context.get("request")
+        url = photo.image.url
+
+        # Local FileSystemStorage URLs are relative; make them absolute for the SPA.
+        if request is not None and url.startswith("/"):
+            return request.build_absolute_uri(url)
+
+        return url

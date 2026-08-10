@@ -73,6 +73,9 @@ cover/
 *.log
 local_settings.py
 
+# User-uploaded media (local FileSystemStorage when USE_S3=False)
+backend/media/
+
 # Local SQLite databases
 *.sqlite3
 *.sqlite3-journal

@@ -14,7 +14,7 @@ export function PlotHoverCard({
 }) {
   const col = plotColors[plot.state];
   const showOwner = !hideOwnerNames && Boolean(plot.owner);
-  const isAvailable = plot.state === "available";
+  const isAvailable = !plot.isOccupied;
 
   return (
     <div

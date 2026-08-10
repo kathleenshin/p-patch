@@ -14,6 +14,7 @@ from .recipients import get_weekly_summary_recipient_emails
 
 def get_weekly_help_requests(garden: Garden):
     week_ago = timezone.now() - timedelta(days=7)
+    two_weeks_ago = timezone.now() - timedelta(days=14)
 
     recent_standard_requests = Q(
         priority__in=[
@@ -27,6 +28,7 @@ def get_weekly_help_requests(garden: Garden):
     unclaimed_urgent_requests = Q(
         priority=HelpRequest.Priority.HIGH,
         assigned_to__isnull=True,
+        created_at__gte=two_weeks_ago,
     )
 
     return (
