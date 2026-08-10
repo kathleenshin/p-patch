@@ -6,7 +6,8 @@ import {
 import { C, serif, sans, mono, inputStyle } from "../theme";
 import type { Screen } from "../types";
 import { useAuth } from "../auth/AuthContext";
-import { usePlots } from "../hooks/usePlots";
+// invalidatePlotsCache refreshes Admin unassigned list after assign succeeds.
+import { invalidatePlotsCache, usePlots } from "../hooks/usePlots";
 import {
   approveUser,
   fetchPendingUsers,
@@ -15,6 +16,8 @@ import {
 } from "@/lib/adminApi";
 import type { AuthUser } from "@/lib/authApi";
 import { ApiError, apiFetch } from "@/lib/api";
+// POST /api/plots/<id>/assign/ — creates primary PlotOwnership.
+import { assignPlotSteward } from "@/api/plots";
 // Garden-admin compose → Dashboard Community board.
 import { createAnnouncement } from "@/lib/announcementsApi";
 // Live Admin unclaimed-tasks panel + resend-claim action.
@@ -74,8 +77,10 @@ function formatDueDate(dueDate: string | null): string {
 
 export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const { accessToken } = useAuth();
+  // Shared plot cache — invalidatePlotsCache() after a successful assign.
   const { plots, plotsLoading, plotsError } = usePlots();
 
+  // Active plots with no PlotOwnership rows (owners[] empty from GET /api/plots/).
   const unassignedPlots = plots.filter(
     (plot) => plot.is_active && plot.owners.length === 0
   );
@@ -110,6 +115,87 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [inventoryAlerts, setInventoryAlerts] = useState<InventoryAlert[]>([]);
   const [inventoryLoading, setInventoryLoading] = useState(true);
   const [inventoryError, setInventoryError] = useState<string | null>(null);
+
+  // Assign-plot modal: pick an approved member as primary steward (PlotOwnership).
+  const [assignPlotId, setAssignPlotId] = useState<number | null>(null);
+  const [assignCandidates, setAssignCandidates] = useState<AuthUser[]>([]);
+  const [assignCandidatesLoading, setAssignCandidatesLoading] = useState(false);
+  const [assignCandidatesError, setAssignCandidatesError] = useState<string | null>(null);
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState<number | null>(null);
+  const [assignSubmitting, setAssignSubmitting] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+
+  const assignPlot = assignPlotId == null
+    ? null
+    : unassignedPlots.find((plot) => plot.id === assignPlotId) ?? null;
+
+  /** Close picker; ignore backdrop clicks while the assign request is running. */
+  const closeAssignModal = () => {
+    if (assignSubmitting) return;
+    setAssignPlotId(null);
+    setAssignCandidates([]);
+    setAssignCandidatesError(null);
+    setSelectedAssigneeId(null);
+    setAssignError(null);
+  };
+
+  /** Open modal and load GET /api/auth/users/ filtered to is_approved. */
+  const openAssignModal = async (plotId: number) => {
+    setAssignPlotId(plotId);
+    setSelectedAssigneeId(null);
+    setAssignError(null);
+    setAssignCandidatesError(null);
+    setAssignCandidates([]);
+
+    if (!accessToken) {
+      setAssignCandidatesError("Sign in required.");
+      return;
+    }
+
+    setAssignCandidatesLoading(true);
+    try {
+      const users = await fetchUsers(accessToken);
+      const approved = users
+        .filter((user) => user.is_approved)
+        .sort((a, b) => displayName(a).localeCompare(displayName(b)));
+      setAssignCandidates(approved);
+    } catch (err) {
+      setAssignCandidatesError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Could not load members.",
+      );
+    } finally {
+      setAssignCandidatesLoading(false);
+    }
+  };
+
+  /** POST /api/plots/<id>/assign/ then refresh the shared plots cache. */
+  const handleAssignPlot = async () => {
+    if (!accessToken || assignPlotId == null || selectedAssigneeId == null) return;
+
+    setAssignSubmitting(true);
+    setAssignError(null);
+    try {
+      await assignPlotSteward(assignPlotId, selectedAssigneeId, accessToken);
+      invalidatePlotsCache();
+      setAssignSubmitting(false);
+      setAssignPlotId(null);
+      setAssignCandidates([]);
+      setSelectedAssigneeId(null);
+    } catch (err) {
+      setAssignError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Could not assign plot.",
+      );
+      setAssignSubmitting(false);
+    }
+  };
 
   const loadPending = useCallback(async () => {
     if (!accessToken) {
@@ -751,9 +837,10 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                         {p.garden_name}
                       </div>
                     </div>
+                    {/* Opens modal with approved members (name + email) */}
                     <button
-                      disabled
-                      title="Plot assignment is not implemented yet"
+                      type="button"
+                      onClick={() => void openAssignModal(p.id)}
                       style={{
                         background: C.amberLight,
                         color: C.amber,
@@ -762,8 +849,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
                         padding: "0.25rem 0.75rem",
                         fontSize: "0.68rem",
                         fontWeight: 800,
-                        cursor: "not-allowed",
-                        opacity: 0.6,
+                        cursor: "pointer",
                         fontFamily: "'Nunito', sans-serif",
                       }}
                     >
@@ -1073,6 +1159,185 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             </div>
             <div style={{ overflow: "auto", flex: 1 }}>
               {renderInventoryAlertsList()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assign primary steward — creates PlotOwnership; list from GET /api/auth/users/ */}
+      {assignPlotId != null && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Assign plot steward"
+          onClick={closeAssignModal}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(44,31,20,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 40,
+            padding: "1rem",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: C.card,
+              borderRadius: "1.375rem",
+              width: "min(92%, 28rem)",
+              maxHeight: "min(80vh, 36rem)",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 1rem 3rem rgba(44,31,20,0.25)",
+              border: `0.125rem solid ${C.border}`,
+              overflow: "hidden",
+            }}
+          >
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "1rem 1.25rem",
+              borderBottom: `0.0625rem solid ${C.border}`,
+            }}>
+              <h3 style={{ ...serif, fontSize: "1.05rem", fontWeight: 700, color: C.brown, margin: 0 }}>
+                Assign Plot {assignPlot?.plot_number ?? ""}
+              </h3>
+              <button
+                type="button"
+                disabled={assignSubmitting}
+                onClick={closeAssignModal}
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.muted }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+
+            <div style={{ padding: "0.875rem 1.25rem 0", fontSize: "0.72rem", color: C.muted }}>
+              Choose an approved member as the primary steward.
+              {assignPlot?.garden_name ? ` Garden: ${assignPlot.garden_name}.` : ""}
+            </div>
+
+            {assignError && (
+              <div style={{ padding: "0.5rem 1.25rem 0", fontSize: "0.72rem", color: C.terra, fontWeight: 700 }}>
+                {assignError}
+              </div>
+            )}
+            {assignCandidatesError && (
+              <div style={{ padding: "0.5rem 1.25rem 0", fontSize: "0.72rem", color: C.terra, fontWeight: 700 }}>
+                {assignCandidatesError}
+              </div>
+            )}
+
+            <div style={{ overflow: "auto", flex: 1, padding: "0.75rem 0" }}>
+              {assignCandidatesLoading ? (
+                <div style={{ padding: "1rem 1.25rem", fontSize: "0.8rem", color: C.muted }}>
+                  Loading members…
+                </div>
+              ) : assignCandidates.length === 0 && !assignCandidatesError ? (
+                <div style={{ padding: "1rem 1.25rem", fontSize: "0.8rem", color: C.muted }}>
+                  No approved members available.
+                </div>
+              ) : (
+                assignCandidates.map((user) => {
+                  const selected = selectedAssigneeId === user.id;
+                  return (
+                    <button
+                      key={user.id}
+                      type="button"
+                      disabled={assignSubmitting}
+                      onClick={() => setSelectedAssigneeId(user.id)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.75rem",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "0.65rem 1.25rem",
+                        border: "none",
+                        borderBottom: `0.0625rem solid ${C.creamDark}`,
+                        background: selected ? C.sageLight : "transparent",
+                        cursor: "pointer",
+                        fontFamily: "'Nunito', sans-serif",
+                      }}
+                    >
+                      <div style={{
+                        width: "2rem",
+                        height: "2rem",
+                        borderRadius: "50%",
+                        background: selected ? C.sage : C.creamDark,
+                        color: selected ? C.white : C.brown,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "0.7rem",
+                        fontWeight: 800,
+                        flexShrink: 0,
+                      }}>
+                        {initialsFor(user)}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
+                          {displayName(user)}
+                        </div>
+                        <div style={{ fontSize: "0.68rem", color: C.muted, overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {user.email}
+                        </div>
+                      </div>
+                      {selected && <UserCheck size={16} color={C.sage} />}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <div style={{
+              display: "flex",
+              gap: "0.5rem",
+              justifyContent: "flex-end",
+              padding: "0.875rem 1.25rem",
+              borderTop: `0.0625rem solid ${C.border}`,
+            }}>
+              <button
+                type="button"
+                disabled={assignSubmitting}
+                onClick={closeAssignModal}
+                style={{
+                  background: C.creamDark,
+                  color: C.brownLight,
+                  border: "none",
+                  borderRadius: "0.5625rem",
+                  padding: "0.5rem 0.875rem",
+                  fontWeight: 700,
+                  fontSize: "0.8rem",
+                  cursor: "pointer",
+                  fontFamily: "'Nunito', sans-serif",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={assignSubmitting || selectedAssigneeId == null}
+                onClick={() => void handleAssignPlot()}
+                style={{
+                  background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
+                  color: C.white,
+                  border: "none",
+                  borderRadius: "0.5625rem",
+                  padding: "0.5rem 1.25rem",
+                  fontWeight: 700,
+                  fontSize: "0.8rem",
+                  cursor: selectedAssigneeId == null || assignSubmitting ? "not-allowed" : "pointer",
+                  opacity: selectedAssigneeId == null || assignSubmitting ? 0.6 : 1,
+                  fontFamily: "'Nunito', sans-serif",
+                }}
+              >
+                {assignSubmitting ? "Assigning…" : "Assign steward"}
+              </button>
             </div>
           </div>
         </div>
