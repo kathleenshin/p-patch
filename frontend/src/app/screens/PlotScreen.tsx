@@ -74,6 +74,7 @@ export function PlotScreen({
       : plots.find((plot) => plot.id === selectedPlotId) ?? null;
 
   const focusPlot = selectedPlot ?? myPlot;
+  const canCreateNotes = Boolean(focusPlot?.is_mine);
   const {
     notes,
     notesLoading,
@@ -714,28 +715,30 @@ export function PlotScreen({
                     Plot Notes
                   </h3>
 
-                  <button
-                    onClick={() => {
-                      setShowNoteForm((prev) => !prev);
-                      setNoteSubmitError(null);
-                    }}
-                    style={{
-                      background: C.sagePop,
-                      color: C.sage,
-                      border: `0.0625rem solid ${C.sageMid}`,
-                      borderRadius: "0.4375rem",
-                      padding: "0.1875rem 0.5625rem",
-                      fontSize: "0.7rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      fontFamily: "'Nunito', sans-serif",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.1875rem",
-                    }}
-                  >
-                    <Plus size={10} /> Add Note
-                  </button>
+                  {canCreateNotes ? (
+                    <button
+                      onClick={() => {
+                        setShowNoteForm((prev) => !prev);
+                        setNoteSubmitError(null);
+                      }}
+                      style={{
+                        background: C.sagePop,
+                        color: C.sage,
+                        border: `0.0625rem solid ${C.sageMid}`,
+                        borderRadius: "0.4375rem",
+                        padding: "0.1875rem 0.5625rem",
+                        fontSize: "0.7rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        fontFamily: "'Nunito', sans-serif",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.1875rem",
+                      }}
+                    >
+                      <Plus size={10} /> Add Note
+                    </button>
+                  ) : null}
                 </div>
 
                 {showNoteForm ? (

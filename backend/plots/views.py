@@ -25,38 +25,30 @@ plot_queryset = (
 
 
 def _visible_plot_notes_for_user(queryset, user):
+    if not user.is_authenticated:
+        return queryset.none()
+
     visibility_filter = Q(author=user)
 
-    if user.is_garden_admin:
-        visibility_filter |= Q(
-            visibility__in=[
-                "this_plot",
-                "all_plots_in_garden",
-                "garden_members",
-            ]
-        )
-    else:
-        visibility_filter |= Q(
-            visibility="this_plot",
-            plot__ownerships__user=user,
-            plot__ownerships__end_date__isnull=True,
-        )
+    visibility_filter |= Q(
+        visibility="this_plot",
+        plot__ownerships__user=user,
+        plot__ownerships__end_date__isnull=True,
+    )
 
-        visibility_filter |= Q(
-            visibility="all_plots_in_garden",
-            plot__garden__plots__ownerships__user=user,
-            plot__garden__plots__ownerships__end_date__isnull=True,
-        )
+    visibility_filter |= Q(
+        visibility="all_plots_in_garden",
+        plot__garden__plots__ownerships__user=user,
+        plot__garden__plots__ownerships__end_date__isnull=True,
+    )
 
-        visibility_filter |= Q(
-            visibility="garden_members",
-            plot__garden__memberships__user=user,
-            plot__garden__memberships__status="active",
-        )
+    visibility_filter |= Q(
+        visibility="garden_members",
+        plot__garden__memberships__user=user,
+        plot__garden__memberships__status="active",
+    )
 
-    return queryset.filter(
-        visibility_filter
-    ).distinct()
+    return queryset.filter(visibility_filter).distinct()
 
 
 # TODO: Add garden-level authorization once the shared permissions
