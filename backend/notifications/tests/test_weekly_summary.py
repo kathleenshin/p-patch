@@ -1,3 +1,4 @@
+from datetime import date
 from unittest.mock import Mock, patch
 
 from django.test import TestCase, override_settings
@@ -12,6 +13,7 @@ from notifications.services.weekly_summary import (
 from notifications.tests.fixtures import (
     create_garden,
     create_membership,
+    create_plot,
     create_user,
 )
 
@@ -128,7 +130,7 @@ class WeeklySummaryServiceTests(TestCase):
         )
 
         plot.owners.add(plot_owner, through_defaults={"end_date": None})
-        plot.ownerships.filter(user=plot_owner).update(end_date="2026-01-01")
+        plot.ownerships.filter(user=plot_owner).update(end_date=date(2026, 1, 1))
 
         notification_service = Mock()
         notification_service.send_email.return_value = EmailDeliveryResult(

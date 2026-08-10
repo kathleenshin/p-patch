@@ -18,27 +18,19 @@ def get_active_garden_member_emails(garden: Garden) -> list[str]:
 
 
 def get_weekly_summary_recipient_emails(garden: Garden) -> list[str]:
-    """Return emails for weekly summary recipients in a garden."""
-
     plot_owner_emails = PlotOwnership.objects.filter(
         plot__garden=garden,
         end_date__isnull=True,
     ).exclude(
-        user__email="",
-    ).values_list(
-        "user__email",
-        flat=True,
-    )
+        user__email=""
+    ).values_list("user__email", flat=True)
 
     admin_emails = GardenMembership.objects.filter(
         garden=garden,
         status="active",
         role="admin",
     ).exclude(
-        user__email="",
-    ).values_list(
-        "user__email",
-        flat=True,
-    )
+        user__email=""
+    ).values_list("user__email", flat=True)
 
     return list(dict.fromkeys(chain(plot_owner_emails, admin_emails)))
