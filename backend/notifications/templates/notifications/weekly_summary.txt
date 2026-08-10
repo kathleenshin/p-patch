@@ -1,3 +1,16 @@
-Weekly summary for {{ garden.name }} is ready.
+Weekly summary for {{ garden.name }}
 
-Active garden members will receive this notice once per week.
+{% if help_requests %}
+Open help requests:
+
+{% for request in help_requests %}
+- {{ request.title }}
+  Priority: {{ request.get_priority_display }}
+  Category: {{ request.get_category_display }}
+  {% if request.plot %}Plot: {{ request.plot.plot_number }}{% endif %}
+  {{ request.description }}
+
+{% endfor %}
+{% else %}
+No open help requests this week.
+{% endif %}

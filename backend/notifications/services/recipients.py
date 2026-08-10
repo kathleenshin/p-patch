@@ -1,5 +1,3 @@
-from itertools import chain
-
 from plots.models import Garden, GardenMembership, PlotOwnership
 
 
@@ -17,20 +15,43 @@ def get_active_garden_member_emails(garden: Garden) -> list[str]:
     )
 
 
+def get_active_plot_steward_emails(garden: Garden) -> list[str]:
+    """Return emails for users with active plot ownerships in a garden."""
+
+    return list(
+        PlotOwnership.objects.filter(
+            plot__garden=garden,
+            end_date__isnull=True,
+        )
+        .exclude(user__email="")
+        .values_list("user__email", flat=True)
+        .distinct()
+    )
+
+
+def get_active_admin_emails(garden: Garden) -> list[str]:
+    """Return emails for active garden admins."""
+
+    return list(
+        GardenMembership.objects.filter(
+            garden=garden,
+            status="active",
+            role="admin",
+        )
+        .exclude(user__email="")
+        .values_list("user__email", flat=True)
+        .distinct()
+    )
+
+
 def get_weekly_summary_recipient_emails(garden: Garden) -> list[str]:
-    plot_owner_emails = PlotOwnership.objects.filter(
-        plot__garden=garden,
-        end_date__isnull=True,
-    ).exclude(
-        user__email=""
-    ).values_list("user__email", flat=True)
+    """Return plot stewards and admins who should receive the weekly summary."""
 
-    admin_emails = GardenMembership.objects.filter(
-        garden=garden,
-        status="active",
-        role="admin",
-    ).exclude(
-        user__email=""
-    ).values_list("user__email", flat=True)
+    plot_steward_emails = get_active_plot_steward_emails(garden)
+    admin_emails = get_active_admin_emails(garden)
 
-    return list(dict.fromkeys(chain(plot_owner_emails, admin_emails)))
+    return list(
+        dict.fromkeys(
+            plot_steward_emails + admin_emails
+        )
+    )
