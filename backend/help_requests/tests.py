@@ -309,12 +309,24 @@ class HelpRequestAPITests(APITestCase):
         self.assertEqual(retrieve_response.data["title"], "Weed paths")
 
         update_response = self.client.patch(
-            reverse("help-request-detail", kwargs={"pk": help_request.id}),
-            {"status": HelpRequest.Status.PENDING},
+            reverse(
+                "help-request-detail",
+                kwargs={"pk": help_request.id},
+            ),
+            {
+                "title": "Weed community paths",
+            },
             format="json",
         )
-        self.assertEqual(update_response.status_code, status.HTTP_200_OK)
-        self.assertEqual(update_response.data["status"], HelpRequest.Status.PENDING)
+
+        self.assertEqual(
+            update_response.status_code,
+            status.HTTP_200_OK,
+        )
+        self.assertEqual(
+            update_response.data["title"],
+            "Weed community paths",
+        )
 
         delete_response = self.client.delete(
             reverse("help-request-detail", kwargs={"pk": help_request.id})
@@ -563,7 +575,7 @@ class HelpRequestAPITests(APITestCase):
         self.assertIsNone(
             help_request.completed_at,
         )
-        
+
 
 class HelpRequestModelTests(TestCase):
     @classmethod
