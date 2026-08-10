@@ -576,6 +576,57 @@ class HelpRequestAPITests(APITestCase):
             help_request.completed_at,
         )
 
+    def test_claim_missing_help_request_returns_404(self):
+        response = self.client.post(
+            reverse(
+                "help-request-claim",
+                kwargs={"pk": 999999},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_404_NOT_FOUND,
+        )
+
+    def test_completed_help_request_cannot_be_unclaimed(self):
+        help_request = HelpRequest.objects.create(
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+            assigned_to=self.user,
+            title="Completed task",
+            description="This task has already been completed.",
+            status=HelpRequest.Status.DONE,
+            completed_at=timezone.now(),
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-unclaim",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_400_BAD_REQUEST,
+        )
+
+        help_request.refresh_from_db()
+
+        self.assertEqual(
+            help_request.status,
+            HelpRequest.Status.DONE,
+        )
+        self.assertEqual(
+            help_request.assigned_to,
+            self.user,
+        )
+        self.assertIsNotNone(
+            help_request.completed_at,
+        )
+        
 
 class HelpRequestModelTests(TestCase):
     @classmethod
@@ -773,6 +824,7 @@ class HelpRequestModelTests(TestCase):
             str(self.help_request),
             "Repair fence",
         )
+
 
 # Mock the notification so tests don't send real emails
 @patch("help_requests.views.notify_urgent_help_request")

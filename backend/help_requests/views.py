@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.utils import timezone
 from rest_framework import generics, status, viewsets
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 
 from notifications.services.email_provider import EmailDeliveryError
 from notifications.services.task_notifications import (
@@ -80,10 +81,9 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
 
     def claim(self, request, pk=None):
         with transaction.atomic():
-            help_request = (
-                HelpRequest.objects
-                .select_for_update()
-                .get(pk=pk)
+            help_request = get_object_or_404(
+                HelpRequest.objects.select_for_update(),
+                pk=pk,
             )
 
             if help_request.status == HelpRequest.Status.DONE:
@@ -120,8 +120,19 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
             status=status.HTTP_200_OK,
         )
 
+
     def unclaim(self, request, pk=None):
         help_request = self.get_object()
+
+        if help_request.status == HelpRequest.Status.DONE:
+            return Response(
+                {
+                    "detail": (
+                        "Completed help requests cannot be unclaimed."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         if help_request.assigned_to_id is None:
             return Response(
@@ -159,7 +170,7 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
             self.get_serializer(help_request).data,
             status=status.HTTP_200_OK,
         )
-
+    
     def complete(self, request, pk=None):
         help_request = self.get_object()
 
