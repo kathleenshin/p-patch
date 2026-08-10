@@ -9,6 +9,8 @@ DATABASES = {
     }
 }
 
+# Never send real emails during tests.
+EMAIL_PROVIDER = "console"
 # Keep photo uploads on the local filesystem during tests (never hit real S3).
 USE_S3 = False
 MEDIA_URL = "/media/"
@@ -17,7 +19,7 @@ STORAGES = {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
     },
     "staticfiles": {
-        "BACKEND": "django.core.files.storage.StaticFilesStorage",
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
     },
 }
 
