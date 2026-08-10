@@ -4,6 +4,11 @@ from .models import HelpRequest
 from .serializers import HelpRequestAssigneeSerializer, HelpRequestSerializer
 from users.models import User
 from users.permissions import IsApproved
+from notifications.services.task_notifications import notify_urgent_help_request_created
+from notifications.services.email_provider import EmailDeliveryError
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class HelpRequestAssigneeListView(generics.ListAPIView):
@@ -21,6 +26,15 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         if self.request.user.is_authenticated:
-            serializer.save(created_by=self.request.user)
+            help_request = serializer.save(created_by=self.request.user)
         else:
-            serializer.save()
+            help_request = serializer.save()
+
+        if help_request.priority == HelpRequest.Priority.HIGH:
+            try:
+                notify_urgent_help_request_created(help_request)
+            except EmailDeliveryError:
+                logger.exception(
+                    "Failed to send urgent help request notification %s",
+                    help_request.pk,
+                )

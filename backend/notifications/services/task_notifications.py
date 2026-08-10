@@ -4,26 +4,25 @@ from help_requests.models import HelpRequest
 
 from .email_provider import EmailDeliveryResult
 from .notification_service import NotificationService
-from .recipients import get_active_garden_member_emails
+from .recipients import get_active_plot_steward_emails
 
 
-def notify_new_help_request(
+def notify_urgent_help_request(
     help_request: HelpRequest,
     notification_service: NotificationService | None = None,
 ) -> EmailDeliveryResult:
-    """Notify active garden members about a new help request."""
+    """Notify active plot stewards about an urgent help request."""
 
-    recipients = get_active_garden_member_emails(help_request.garden)
+    recipients = get_active_plot_steward_emails(help_request.garden)
     service = notification_service or NotificationService.from_settings()
 
     if help_request.plot:
         plot_label = f"Plot {help_request.plot.plot_number}"
-        subject = f"New help request for {plot_label}"
+        subject = f"Urgent help request for {plot_label}"
         location = f"{plot_label} at {help_request.garden.name}"
     else:
-        subject = "New garden help request"
+        subject = "Urgent garden help request"
         location = help_request.garden.name
-
     # Uses .txt email template
     # TODO: Create HTML email template for help request notifications
     message = render_to_string(
