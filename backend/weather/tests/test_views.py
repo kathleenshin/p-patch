@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+from django.core.cache import cache
+
 from weather.services.air_quality import AirQualityServiceError
 from weather.services.open_meteo import WeatherServiceError
 
@@ -12,6 +14,8 @@ from .fixtures import (
 
 class WeatherViewTests(WeatherTestFixtures):
     def setUp(self):
+        cache.clear()
+
         user = self.create_auth_user()
 
         self.client.defaults.update(
@@ -108,6 +112,102 @@ class WeatherViewTests(WeatherTestFixtures):
 
     @patch("weather.views.AirQualityService.get_air_quality")
     @patch("weather.views.OpenMeteoService.get_forecast")
+    def test_uses_cached_weather_without_refetching(
+        self,
+        mock_get_forecast,
+        mock_get_air_quality,
+    ):
+        cache.set(
+            self.weather_cache_key(
+                self.garden_with_coordinates
+            ),
+            self.sample_normalized_weather_payload(),
+            timeout=600,
+        )
+
+        mock_get_air_quality.return_value = (
+            self.sample_air_quality_payload()
+        )
+
+        response = self.weather_get(
+            client=self.client,
+            garden_id=self.garden_with_coordinates.id,
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        mock_get_forecast.assert_not_called()
+        mock_get_air_quality.assert_called_once()
+
+    @patch("weather.views.AirQualityService.get_air_quality")
+    @patch("weather.views.OpenMeteoService.get_forecast")
+    def test_successful_weather_response_is_cached(
+        self,
+        mock_get_forecast,
+        mock_get_air_quality,
+    ):
+        mock_get_forecast.return_value = (
+            self.sample_normalized_weather_payload()
+        )
+        mock_get_air_quality.return_value = (
+            self.sample_air_quality_payload()
+        )
+
+        self.weather_get(
+            client=self.client,
+            garden_id=self.garden_with_coordinates.id,
+        )
+
+        cached = cache.get(
+            self.weather_cache_key(
+                self.garden_with_coordinates
+            )
+        )
+
+        self.assertEqual(
+            cached,
+            self.sample_normalized_weather_payload(),
+        )
+
+    @patch("weather.views.AirQualityService.get_air_quality")
+    @patch("weather.views.OpenMeteoService.get_forecast")
+    def test_weather_failure_returns_fallback_and_is_not_cached(
+        self,
+        mock_get_forecast,
+        mock_get_air_quality,
+    ):
+        mock_get_forecast.side_effect = WeatherServiceError(
+            OPEN_METEO_UNAVAILABLE_DETAIL
+        )
+        mock_get_air_quality.return_value = (
+            self.sample_air_quality_payload()
+        )
+
+        response = self.weather_get(
+            client=self.client,
+            garden_id=self.garden_with_coordinates.id,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.json()["current"]["weather_description"],
+            "Unavailable",
+        )
+        self.assertEqual(
+            response.json()["forecast"],
+            [],
+        )
+
+        self.assertIsNone(
+            cache.get(
+                self.weather_cache_key(
+                    self.garden_with_coordinates
+                )
+            )
+        )
+
+    @patch("weather.views.AirQualityService.get_air_quality")
+    @patch("weather.views.OpenMeteoService.get_forecast")
     def test_returns_weather_when_air_quality_fails(
         self,
         mock_get_forecast,
@@ -138,23 +238,3 @@ class WeatherViewTests(WeatherTestFixtures):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), expected)
-
-    @patch("weather.views.OpenMeteoService.get_forecast")
-    def test_returns_502_when_weather_service_fails(
-        self,
-        mock_get_forecast,
-    ):
-        mock_get_forecast.side_effect = WeatherServiceError(
-            OPEN_METEO_UNAVAILABLE_DETAIL
-        )
-
-        response = self.weather_get(
-            client=self.client,
-            garden_id=self.garden_with_coordinates.id,
-        )
-
-        self.assertEqual(response.status_code, 502)
-        self.assertEqual(
-            response.json()["detail"],
-            OPEN_METEO_UNAVAILABLE_DETAIL,
-        )

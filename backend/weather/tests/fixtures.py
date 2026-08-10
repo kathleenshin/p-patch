@@ -10,7 +10,7 @@ WEATHER_FORECAST_URL_NAME = "weather-forecast"
 AUTH_TEST_EMAIL = "weather-test@example.com"
 AUTH_TEST_PASSWORD = "password123"
 
-OPEN_METEO_UNAVAILABLE_DETAIL = "Unable to retrieve valid weather data."
+OPEN_METEO_UNAVAILABLE_DETAIL = "Unable to retrieve weather data."
 AIR_QUALITY_UNAVAILABLE_DETAIL = (
     "Unable to retrieve valid air quality data."
 )
@@ -32,6 +32,10 @@ class WeatherTestFixtures(TestCase):
     @staticmethod
     def weather_url():
         return reverse(WEATHER_FORECAST_URL_NAME)
+
+    @staticmethod
+    def weather_cache_key(garden):
+        return f"weather_forecast_garden_{garden.id}"
 
     @staticmethod
     def auth_headers_for_user(user):

@@ -1,3 +1,4 @@
+from django.core.cache import cache
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -18,8 +19,6 @@ from .services.open_meteo import (
 
 # Weather forecasts are retrieved for the garden's location rather than
 # the retrieving user's location.
-
-
 class WeatherForecastView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -56,25 +55,37 @@ class WeatherForecastView(APIView):
             "longitude": float(garden.longitude),
         }
 
-        try:
-            data = OpenMeteoService.get_forecast(
-                **coordinates
-            )
-        except WeatherServiceError:
-            data = {
-                "current": {
-                    "temperature_f": None,
-                    "feels_like_f": None,
-                    "humidity_percent": None,
-                    "weather_code": None,
-                    "weather_description": "Unavailable",
-                    "wind_speed_mph": None,
-                    "uv_index": None,
-                    "precipitation_probability_percent": None,
-                    "precipitation_inches": None,
-                },
-                "forecast": [],
-            }
+        cache_key = f"weather_forecast_garden_{garden.id}"
+
+        data = cache.get(cache_key)
+
+        if data is None:
+            try:
+                data = OpenMeteoService.get_forecast(
+                    **coordinates
+                )
+
+                cache.set(
+                    cache_key,
+                    data,
+                    timeout=600,
+                )
+
+            except WeatherServiceError:
+                data = {
+                    "current": {
+                        "temperature_f": None,
+                        "feels_like_f": None,
+                        "humidity_percent": None,
+                        "weather_code": None,
+                        "weather_description": "Unavailable",
+                        "wind_speed_mph": None,
+                        "uv_index": None,
+                        "precipitation_probability_percent": None,
+                        "precipitation_inches": None,
+                    },
+                    "forecast": [],
+                }
 
         try:
             data["air_quality"] = (
