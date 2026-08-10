@@ -13,6 +13,7 @@ vi.mock("@/lib/api", async () => {
 import {
   fetchHelpRequests,
   isUnclaimedHelpRequest,
+  isUnclaimedUrgentHelpRequest,
   resendHelpRequestClaim,
   type HelpRequest,
 } from "@/lib/helpRequestsApi";
@@ -68,5 +69,24 @@ describe("helpRequestsApi", () => {
       isUnclaimedHelpRequest(sampleRequest({ assigned_to: 4, status: "pending" })),
     ).toBe(false);
     expect(isUnclaimedHelpRequest(sampleRequest({ status: "done" }))).toBe(false);
+  });
+
+  it("isUnclaimedUrgentHelpRequest requires unclaimed and priority high", () => {
+    expect(
+      isUnclaimedUrgentHelpRequest(sampleRequest({ priority: "high" })),
+    ).toBe(true);
+    expect(
+      isUnclaimedUrgentHelpRequest(sampleRequest({ priority: "medium" })),
+    ).toBe(false);
+    expect(
+      isUnclaimedUrgentHelpRequest(
+        sampleRequest({ priority: "high", assigned_to: 4 }),
+      ),
+    ).toBe(false);
+    expect(
+      isUnclaimedUrgentHelpRequest(
+        sampleRequest({ priority: "high", status: "done" }),
+      ),
+    ).toBe(false);
   });
 });

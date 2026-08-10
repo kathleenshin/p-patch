@@ -23,7 +23,6 @@ import { createAnnouncement } from "@/lib/announcementsApi";
 // Live Admin unclaimed-tasks panel + resend-claim action.
 import {
   fetchHelpRequests,
-  isUnclaimedHelpRequest,
   resendHelpRequestClaim,
   type HelpRequest,
 } from "@/lib/helpRequestsApi";
@@ -33,8 +32,15 @@ import {
   type InventoryAlert,
   type InventoryItemRow,
 } from "@/lib/adminInventoryAlerts";
+// Top-card / popup list filters (approved members, unassigned plots, urgent tasks).
+import {
+  filterApprovedMembers,
+  filterUnassignedPlots,
+  filterUnclaimedUrgentHelpRequests,
+} from "@/lib/adminDashboardLists";
 
-type AdminListModal = "pending" | "plots" | "tasks" | "inventory" | null; // which View-all modal is open
+/** Which Admin full-list popup is open (top cards + panel View all share these). */
+type AdminListModal = "pending" | "members" | "plots" | "tasks" | "inventory" | null;
 
 const AVATAR_COLORS = [C.terra, C.sage, C.amber, C.lavender, C.sky];
 
@@ -75,15 +81,13 @@ function formatDueDate(dueDate: string | null): string {
   });
 }
 
-export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
+export function AdminScreen({ setScreen: _setScreen }: { setScreen: (s: Screen) => void }) {
   const { accessToken } = useAuth();
   // Shared plot cache — invalidatePlotsCache() after a successful assign.
   const { plots, plotsLoading, plotsError } = usePlots();
 
-  // Active plots with no PlotOwnership rows (owners[] empty from GET /api/plots/).
-  const unassignedPlots = plots.filter(
-    (plot) => plot.is_active && plot.owners.length === 0
-  );
+  // Unassigned Plots card/popup: active plots with empty owners[] (no PlotOwnership).
+  const unassignedPlots = filterUnassignedPlots(plots);
 
   const [showAnnForm, setShowAnnForm] = useState(false);
   const [annText, setAnnText] = useState("");
@@ -91,7 +95,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [annPosting, setAnnPosting] = useState(false); // disables Post while create is in flight
   const [annError, setAnnError] = useState<string | null>(null);
   const [annSuccess, setAnnSuccess] = useState<string | null>(null); // shown after a successful create
-  // Controls the full-list popup (pending today; other keys reserved for later panels).
+  // Top cards + View all open the matching list popup (members/plots/tasks/inventory/pending).
   const [listModal, setListModal] = useState<AdminListModal>(null);
 
   // Live pending registrations (other Admin panels stay mock for now).
@@ -99,10 +103,13 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
   const [pendingLoading, setPendingLoading] = useState(true);
   const [pendingError, setPendingError] = useState<string | null>(null);
   const [actionUserId, setActionUserId] = useState<number | null>(null);
-  // Approved member count for the stat card beside Pending Registrations.
-  const [approvedMemberCount, setApprovedMemberCount] = useState(0);
+  // Approved members for the top stat card popup (GET /api/auth/users/).
+  const [approvedMembers, setApprovedMembers] = useState<AuthUser[]>([]);
+  const [approvedMembersLoading, setApprovedMembersLoading] = useState(false);
+  const [approvedMembersError, setApprovedMembersError] = useState<string | null>(null);
+  const approvedMemberCount = approvedMembers.length;
 
-  // Live unclaimed help requests (no assignee, not done).
+  // Live unclaimed urgent (high-priority) help requests (no assignee, not done).
   const [unclaimedTasks, setUnclaimedTasks] = useState<HelpRequest[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [tasksError, setTasksError] = useState<string | null>(null);
@@ -139,7 +146,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     setAssignError(null);
   };
 
-  /** Open modal and load GET /api/auth/users/ filtered to is_approved. */
+  /** Open Assign modal and load approved stewards from GET /api/auth/users/. */
   const openAssignModal = async (plotId: number) => {
     setAssignPlotId(plotId);
     setSelectedAssigneeId(null);
@@ -155,9 +162,10 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     setAssignCandidatesLoading(true);
     try {
       const users = await fetchUsers(accessToken);
-      const approved = users
-        .filter((user) => user.is_approved)
-        .sort((a, b) => displayName(a).localeCompare(displayName(b)));
+      // Same approved-member filter as the Approved Members top-card popup.
+      const approved = filterApprovedMembers(users).sort((a, b) =>
+        displayName(a).localeCompare(displayName(b)),
+      );
       setAssignCandidates(approved);
     } catch (err) {
       setAssignCandidatesError(
@@ -222,22 +230,37 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     }
   }, [accessToken]);
 
-  // Count approved members from GET /api/auth/users/ (garden-admin only).
+  // Load approved members for the Approved Members top-card count + popup list.
   const loadApprovedMembers = useCallback(async () => {
     if (!accessToken) {
-      setApprovedMemberCount(0);
+      setApprovedMembers([]);
+      setApprovedMembersLoading(false);
       return;
     }
+    setApprovedMembersLoading(true);
+    setApprovedMembersError(null);
     try {
       const users = await fetchUsers(accessToken);
-      setApprovedMemberCount(users.filter((u) => u.is_approved).length);
-    } catch {
-      // Stat card only — leave last known count on soft failure.
-      setApprovedMemberCount(0);
+      // Same filter as the members popup body (is_approved from GET /api/auth/users/).
+      const approved = filterApprovedMembers(users).sort((a, b) =>
+        displayName(a).localeCompare(displayName(b)),
+      );
+      setApprovedMembers(approved);
+    } catch (err) {
+      setApprovedMembers([]);
+      setApprovedMembersError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Could not load approved members.",
+      );
+    } finally {
+      setApprovedMembersLoading(false);
     }
   }, [accessToken]);
 
-  // Load help requests and keep only unclaimed ones for the Admin panel.
+  // Load help requests for Unclaimed Tasks card/popup (unclaimed + priority high only).
   const loadUnclaimedTasks = useCallback(async () => {
     if (!accessToken) {
       setUnclaimedTasks([]);
@@ -248,7 +271,8 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     setTasksError(null);
     try {
       const requests = await fetchHelpRequests(accessToken);
-      setUnclaimedTasks(requests.filter(isUnclaimedHelpRequest));
+      // High urgency only — medium/low unclaimed tasks stay on TaskScreen.
+      setUnclaimedTasks(filterUnclaimedUrgentHelpRequests(requests));
     } catch (err) {
       setUnclaimedTasks([]);
       setTasksError(
@@ -433,14 +457,15 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     action: () => void;
     hint?: string;
   }[] = [
-    // Pending opens the full-list modal; other cards still navigate to member screens.
+    // Each top card opens its full-list popup (shared with panel View all where applicable).
     { label: "Pending Registrations", value: pendingUsers.length, color: C.terra, Icon: Users, action: () => setListModal("pending") },
-    // Live approved count from GET /api/auth/users/ — sits beside Pending.
-    { label: "Approved Members", value: approvedMemberCount, color: C.sage, Icon: UserCheck, action: () => {}, hint: "Garden members" },
-    { label: "Unassigned Plots", value: unassignedPlots.length, color: C.amber, Icon: LayoutGrid, action: () => setScreen("plot") },
-    // Live unclaimed count; opens the tasks View-all modal.
+    // Approved Members: popup of all is_approved users (not just a count).
+    { label: "Approved Members", value: approvedMemberCount, color: C.sage, Icon: UserCheck, action: () => setListModal("members"), hint: "Garden members" },
+    // Unassigned Plots: popup list with Assign (stays on Admin; no navigate to Plot screen).
+    { label: "Unassigned Plots", value: unassignedPlots.length, color: C.amber, Icon: LayoutGrid, action: () => setListModal("plots") },
+    // Unclaimed Tasks: popup of unclaimed high-urgency help requests.
     { label: "Unclaimed Tasks", value: unclaimedTasks.length, color: C.lavender, Icon: ClipboardList, action: () => setListModal("tasks") },
-    // Live inventory alert count; opens the inventory View-all modal.
+    // Inventory Alerts: popup of out-of-stock / low-stock rows.
     { label: "Inventory Alerts", value: inventoryAlerts.length, color: C.sky, Icon: Archive, action: () => setListModal("inventory") },
   ];
 
@@ -547,7 +572,153 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     });
   }
 
-  // Shared unclaimed-task rows for the dashboard panel and the View-all modal.
+  // Approved Members popup rows (top card only — read-only name + email).
+  function renderApprovedMembersList() {
+    if (approvedMembersLoading) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+          Loading approved members…
+        </div>
+      );
+    }
+    if (approvedMembersError) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.terra, fontWeight: 600 }}>
+          {approvedMembersError}
+        </div>
+      );
+    }
+    if (approvedMembers.length === 0) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+          No approved members.
+        </div>
+      );
+    }
+    return approvedMembers.map((user, i) => {
+      const color = AVATAR_COLORS[user.id % AVATAR_COLORS.length];
+      return (
+        <div
+          key={user.id}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "0.625rem",
+            padding: "0.6875rem 1rem",
+            borderBottom:
+              i < approvedMembers.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+          }}
+        >
+          <div
+            style={{
+              width: "2rem",
+              height: "2rem",
+              borderRadius: "50%",
+              background: color,
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              color: C.white,
+              fontWeight: 800,
+              fontSize: "0.64rem",
+            }}
+          >
+            {initialsFor(user)}
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
+              {displayName(user)}
+            </div>
+            <div style={{ fontSize: "0.66rem", color: C.muted, ...mono }}>
+              {user.email}
+              {user.date_joined ? ` · ${formatJoined(user.date_joined)}` : ""}
+            </div>
+          </div>
+        </div>
+      );
+    });
+  }
+
+  // Unassigned Plots panel + popup rows (Assign opens steward picker above list modal).
+  function renderUnassignedPlotsList() {
+    if (plotsLoading) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+          Loading plots…
+        </div>
+      );
+    }
+    if (plotsError) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.terra, fontWeight: 600 }}>
+          {plotsError}
+        </div>
+      );
+    }
+    if (unassignedPlots.length === 0) {
+      return (
+        <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
+          No unassigned plots.
+        </div>
+      );
+    }
+    return unassignedPlots.map((p, i) => (
+      <div
+        key={p.id}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.625rem",
+          padding: "0.6875rem 1rem",
+          borderBottom:
+            i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+        }}
+      >
+        <div
+          style={{
+            width: "2rem",
+            height: "2rem",
+            borderRadius: "0.5625rem",
+            background: C.sageLight,
+            flexShrink: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <LayoutGrid size={14} color={C.sage} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
+            Plot {p.plot_number}
+          </div>
+          <div style={{ fontSize: "0.66rem", color: C.muted }}>
+            {p.garden_name}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void openAssignModal(p.id)}
+          style={{
+            background: C.amberLight,
+            color: C.amber,
+            border: "none",
+            borderRadius: "0.4375rem",
+            padding: "0.25rem 0.75rem",
+            fontSize: "0.68rem",
+            fontWeight: 800,
+            cursor: "pointer",
+            fontFamily: "'Nunito', sans-serif",
+          }}
+        >
+          Assign
+        </button>
+      </div>
+    ));
+  }
+
+  // Shared unclaimed high-urgency rows for the Unclaimed Tasks panel and popup.
   function renderUnclaimedList() {
     if (tasksLoading) {
       return (
@@ -566,7 +737,8 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
     if (unclaimedTasks.length === 0) {
       return (
         <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
-          No unclaimed help requests.
+          {/* Empty copy matches high-urgency Admin filter (not all unclaimed tasks). */}
+          No unclaimed urgent help requests.
         </div>
       );
     }
@@ -788,80 +960,14 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             </div>
           ))}
 
-          {panel("Unassigned Plots", <LayoutGrid size={13} color={C.sage} />, viewAll(() => setScreen("plot")), (
+          {/* View all opens Unassigned Plots popup (same list as the top card). */}
+          {panel("Unassigned Plots", <LayoutGrid size={13} color={C.sage} />, viewAll(() => setListModal("plots")), (
             <div>
-              {plotsLoading ? (
-                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
-                  Loading plots…
-                </div>
-              ) : plotsError ? (
-                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.terra, fontWeight: 600 }}>
-                  {plotsError}
-                </div>
-              ) : unassignedPlots.length === 0 ? (
-                <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
-                  No unassigned plots.
-                </div>
-              ) : (
-                unassignedPlots.map((p, i) => (
-                  <div
-                    key={p.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "0.625rem",
-                      padding: "0.6875rem 1rem",
-                      borderBottom:
-                        i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: "2rem",
-                        height: "2rem",
-                        borderRadius: "0.5625rem",
-                        background: C.sageLight,
-                        flexShrink: 0,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <LayoutGrid size={14} color={C.sage} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: "0.82rem", fontWeight: 700, color: C.brown }}>
-                        Plot {p.plot_number}
-                      </div>
-                      <div style={{ fontSize: "0.66rem", color: C.muted }}>
-                        {p.garden_name}
-                      </div>
-                    </div>
-                    {/* Opens modal with approved members (name + email) */}
-                    <button
-                      type="button"
-                      onClick={() => void openAssignModal(p.id)}
-                      style={{
-                        background: C.amberLight,
-                        color: C.amber,
-                        border: "none",
-                        borderRadius: "0.4375rem",
-                        padding: "0.25rem 0.75rem",
-                        fontSize: "0.68rem",
-                        fontWeight: 800,
-                        cursor: "pointer",
-                        fontFamily: "'Nunito', sans-serif",
-                      }}
-                    >
-                      Assign
-                    </button>
-                  </div>
-                ))
-              )}
+              {renderUnassignedPlotsList()}
             </div>
           ))}
 
-          {/* Live unclaimed help requests — Resend claim email only (no assign) */}
+          {/* Live unclaimed urgent help requests — Resend claim email only (no assign) */}
           {panel("Unclaimed Help Requests", <AlertTriangle size={13} color={C.sage} />, viewAll(() => setListModal("tasks")), (
             <div>
               {renderUnclaimedList()}
@@ -1048,7 +1154,121 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
       )}
 
-      {/* Full unclaimed-tasks modal (stat card / View all). Backdrop click closes. */}
+      {/* Approved Members top-card popup — full is_approved list (read-only). */}
+      {listModal === "members" && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Approved members"
+          onClick={() => setListModal(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(44,31,20,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 40,
+            padding: "1rem",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: C.card,
+              borderRadius: "1.375rem",
+              width: "min(92%, 32rem)",
+              maxHeight: "min(80vh, 40rem)",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 1rem 3rem rgba(44,31,20,0.25)",
+              border: `0.125rem solid ${C.border}`,
+              overflow: "hidden",
+            }}
+          >
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "1rem 1.25rem",
+              borderBottom: `0.0625rem solid ${C.border}`,
+            }}>
+              <h3 style={{ ...serif, fontSize: "1.05rem", fontWeight: 700, color: C.brown, margin: 0 }}>
+                Approved Members
+              </h3>
+              <button
+                type="button"
+                onClick={() => setListModal(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.muted }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div style={{ overflow: "auto", flex: 1 }}>
+              {renderApprovedMembersList()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unassigned Plots top-card / View-all popup — Assign stacks above (z-index 50). */}
+      {listModal === "plots" && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Unassigned plots"
+          onClick={() => setListModal(null)}
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(44,31,20,0.5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 40,
+            padding: "1rem",
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: C.card,
+              borderRadius: "1.375rem",
+              width: "min(92%, 32rem)",
+              maxHeight: "min(80vh, 40rem)",
+              display: "flex",
+              flexDirection: "column",
+              boxShadow: "0 1rem 3rem rgba(44,31,20,0.25)",
+              border: `0.125rem solid ${C.border}`,
+              overflow: "hidden",
+            }}
+          >
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "1rem 1.25rem",
+              borderBottom: `0.0625rem solid ${C.border}`,
+            }}>
+              <h3 style={{ ...serif, fontSize: "1.05rem", fontWeight: 700, color: C.brown, margin: 0 }}>
+                Unassigned Plots
+              </h3>
+              <button
+                type="button"
+                onClick={() => setListModal(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: C.muted }}
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div style={{ overflow: "auto", flex: 1 }}>
+              {renderUnassignedPlotsList()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Unclaimed Tasks popup — unclaimed + priority high only (Resend claim email). */}
       {listModal === "tasks" && (
         <div
           role="dialog"
@@ -1164,7 +1384,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
         </div>
       )}
 
-      {/* Assign primary steward — creates PlotOwnership; list from GET /api/auth/users/ */}
+      {/* Assign steward stacks above Unassigned Plots popup when opened from that list. */}
       {assignPlotId != null && (
         <div
           role="dialog"
@@ -1178,7 +1398,7 @@ export function AdminScreen({ setScreen }: { setScreen: (s: Screen) => void }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            zIndex: 40,
+            zIndex: 50,
             padding: "1rem",
           }}
         >
