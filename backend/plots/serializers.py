@@ -142,6 +142,29 @@ class PlotNoteSerializer(serializers.ModelSerializer):
             "created_at",
         ]
 
+    def validate(self, attrs):
+        request = self.context.get("request")
+        plot = attrs.get("plot")
+
+        if not request or not getattr(request.user, "is_authenticated", False):
+            return attrs
+
+        if plot is None:
+            return attrs
+
+        user = request.user
+        has_active_ownership = plot.ownerships.filter(
+            user=user,
+            end_date__isnull=True,
+        ).exists()
+
+        if not has_active_ownership:
+            raise serializers.ValidationError(
+                {"plot": "You must be an active steward of this plot to create a note."}
+            )
+
+        return attrs
+
 
 class PlotPhotoSerializer(serializers.ModelSerializer):
     """

@@ -24,6 +24,33 @@ plot_queryset = (
 )
 
 
+def _visible_plot_notes_for_user(queryset, user):
+    if not user.is_authenticated:
+        return queryset.none()
+
+    visibility_filter = Q(author=user)
+
+    visibility_filter |= Q(
+        visibility="this_plot",
+        plot__ownerships__user=user,
+        plot__ownerships__end_date__isnull=True,
+    )
+
+    visibility_filter |= Q(
+        visibility="all_plots_in_garden",
+        plot__garden__plots__ownerships__user=user,
+        plot__garden__plots__ownerships__end_date__isnull=True,
+    )
+
+    visibility_filter |= Q(
+        visibility="garden_members",
+        plot__garden__memberships__user=user,
+        plot__garden__memberships__status="active",
+    )
+
+    return queryset.filter(visibility_filter).distinct()
+
+
 # TODO: Add garden-level authorization once the shared permissions
 # implementation is finalized. For now, these endpoints rely on the
 # project's global authentication settings.
@@ -65,31 +92,6 @@ class PlotNoteListCreateView(generics.ListCreateAPIView):
                 {"plot": "A numeric plot id is required."}
             )
 
-    def _visible_queryset(self, queryset):
-        user = self.request.user
-
-        if user.is_garden_admin:
-            return queryset
-
-        return queryset.filter(
-            Q(author=user)
-            | Q(
-                visibility="this_plot",
-                plot__ownerships__user=user,
-                plot__ownerships__end_date__isnull=True,
-            )
-            | Q(
-                visibility="all_plots_in_garden",
-                plot__garden__plots__ownerships__user=user,
-                plot__garden__plots__ownerships__end_date__isnull=True,
-            )
-            | Q(
-                visibility="garden_members",
-                plot__garden__memberships__user=user,
-                plot__garden__memberships__status="active",
-            )
-        ).distinct()
-
     def get_queryset(self):
         plot_id = self._validated_plot_id()
 
@@ -97,12 +99,19 @@ class PlotNoteListCreateView(generics.ListCreateAPIView):
             "plot",
             "plot__garden",
             "author",
-        ).filter(plot_id=plot_id)
+        ).filter(
+            plot_id=plot_id
+        )
 
-        return self._visible_queryset(queryset)
+        return _visible_plot_notes_for_user(
+            queryset,
+            self.request.user,
+        )
 
     def perform_create(self, serializer):
-        serializer.save(author=self.request.user)
+        serializer.save(
+            author=self.request.user
+        )
 
 
 # TODO: Restrict updates and deletion to the note author or a garden admin
@@ -118,29 +127,10 @@ class PlotNoteDetailView(generics.RetrieveUpdateDestroyAPIView):
             "author",
         ).all()
 
-        user = self.request.user
-
-        if user.is_garden_admin:
-            return queryset
-
-        return queryset.filter(
-            Q(author=user)
-            | Q(
-                visibility="this_plot",
-                plot__ownerships__user=user,
-                plot__ownerships__end_date__isnull=True,
-            )
-            | Q(
-                visibility="all_plots_in_garden",
-                plot__garden__plots__ownerships__user=user,
-                plot__garden__plots__ownerships__end_date__isnull=True,
-            )
-            | Q(
-                visibility="garden_members",
-                plot__garden__memberships__user=user,
-                plot__garden__memberships__status="active",
-            )
-        ).distinct()
+        return _visible_plot_notes_for_user(
+            queryset,
+            self.request.user,
+        )
 
 
 # TODO: Restrict photo create/delete to active plot stewards or garden admins.
@@ -153,7 +143,11 @@ class PlotPhotoListCreateView(generics.ListCreateAPIView):
     default storage (local media/ or S3 when USE_S3=True).
     """
 
-    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    parser_classes = [
+        MultiPartParser,
+        FormParser,
+        JSONParser,
+    ]
     serializer_class = PlotPhotoSerializer
 
     def get_queryset(self):
@@ -164,13 +158,18 @@ class PlotPhotoListCreateView(generics.ListCreateAPIView):
         ).all()
 
         plot_id = self.request.query_params.get("plot")
+
         if plot_id:
-            queryset = queryset.filter(plot_id=plot_id)
+            queryset = queryset.filter(
+                plot_id=plot_id
+            )
 
         return queryset
 
     def perform_create(self, serializer):
-        serializer.save(uploaded_by=self.request.user)
+        serializer.save(
+            uploaded_by=self.request.user
+        )
 
 
 class PlotPhotoDetailView(generics.RetrieveDestroyAPIView):
@@ -181,4 +180,5 @@ class PlotPhotoDetailView(generics.RetrieveDestroyAPIView):
         "plot__garden",
         "uploaded_by",
     ).all()
+
     serializer_class = PlotPhotoSerializer
