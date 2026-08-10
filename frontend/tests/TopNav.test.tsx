@@ -31,8 +31,8 @@ function renderNav(
     user: auth.user ?? { first_name: "Ada", email: "ada@example.com" },
   });
 
-  render(<TopNav screen={screenName} setScreen={setScreen} />);
-  return { setScreen };
+  const view = render(<TopNav screen={screenName} setScreen={setScreen} />);
+  return { setScreen, ...view };
 }
 
 describe("TopNav", () => {
@@ -45,20 +45,25 @@ describe("TopNav", () => {
     cleanup();
   });
 
-  it("renders the park logo at 3rem tall", () => {
-    renderNav();
+  it("renders the circular logo mark beside the Bodoni Moda wordmark", () => {
+    const { container } = renderNav();
 
-    const logo = screen.getByRole("img", { name: "Judkins Park P-Patch" });
-    expect(logo).toHaveAttribute("src", "judkins-park-logo.png");
-    // Prefer inline style — jsdom computes rem as px.
-    expect((logo as HTMLImageElement).style.height).toBe("3rem");
+    const logo = container.querySelector('img[src="judkins-park-logo.png"]') as HTMLImageElement;
+    expect(logo).toBeTruthy();
+    expect(logo.style.height).toBe("2.75rem");
+    const wordmark = screen.getByText("Judkins Park P-Patch Gardening");
+    expect(wordmark).toBeInTheDocument();
+    expect(wordmark).toHaveStyle({
+      fontFamily: "'Bodoni Moda', serif",
+      color: "#FAF8F3",
+    });
   });
 
-  it("returns to the dashboard when the logo is clicked", async () => {
+  it("returns to the dashboard when the brand is clicked", async () => {
     const user = userEvent.setup();
     const { setScreen } = renderNav("tasks", { isApproved: true });
 
-    await user.click(screen.getByRole("img", { name: "Judkins Park P-Patch" }));
+    await user.click(screen.getByText("Judkins Park P-Patch Gardening"));
 
     expect(setScreen).toHaveBeenCalledWith("dashboard");
   });

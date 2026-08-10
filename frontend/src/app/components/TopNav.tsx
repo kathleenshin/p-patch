@@ -26,14 +26,26 @@ export function TopNav({ screen, setScreen }: { screen: Screen; setScreen: (s: S
     <nav style={{ background: C.header, ...sans, position: "sticky", top: 0, zIndex: 20,
       display: "flex", alignItems: "center", justifyContent: "space-between",
       padding: "0 4%", height: "3.25rem" }}>
-      {/* Brand logo — click returns to dashboard */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer",
+      {/* Brand mark + wordmark — click returns to dashboard */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.625rem", cursor: "pointer",
         flexShrink: 0 }} onClick={() => setScreen("dashboard")}>
         <img
           src={parkLogo}
-          alt="Judkins Park P-Patch"
-          style={{ height: "3rem", width: "auto", objectFit: "contain", display: "block" }}
+          alt=""
+          aria-hidden="true"
+          style={{ height: "2.75rem", width: "2.75rem", objectFit: "contain", display: "block" }}
         />
+        <span style={{
+          fontFamily: "'Bodoni Moda', serif",
+          fontOpticalSizing: "auto",
+          color: C.cream,
+          fontWeight: 600,
+          fontSize: "0.95rem",
+          lineHeight: 1.15,
+          whiteSpace: "nowrap",
+        }}>
+          Judkins Park P-Patch Gardening
+        </span>
       </div>
       {/* Primary screen links (role-gated above) */}
       <div style={{ display: "flex", alignItems: "center", gap: "0.125rem" }}>
