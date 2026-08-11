@@ -163,3 +163,274 @@ class AuthApiTests(APITestCase):
         response = self.post_refresh(self.INVALID_REFRESH_TOKEN)
 
         self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_change_password_updates_credentials(self):
+        user = self.create_user(is_approved=True)
+        self.authenticate_as(user)
+        url = reverse("auth-change-password")
+
+        response = self.client.post(
+            url,
+            {
+                "current_password": self.PASSWORD,
+                "new_password": "new-password-99",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password("new-password-99"))
+
+    def test_change_password_rejects_wrong_current(self):
+        user = self.create_user(is_approved=True)
+        self.authenticate_as(user)
+
+        response = self.client.post(
+            reverse("auth-change-password"),
+            {
+                "current_password": self.WRONG_PASSWORD,
+                "new_password": "new-password-99",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password(self.PASSWORD))
+
+    def test_change_email_sets_pending_without_switching(self):
+        user = self.create_user(is_approved=True)
+        self.authenticate_as(user)
+        new_email = "ada.new@example.com"
+
+        response = self.client.post(
+            reverse("auth-change-email"),
+            {
+                "new_email": new_email,
+                "current_password": self.PASSWORD,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["pending_email"], new_email)
+        user.refresh_from_db()
+        self.assertEqual(user.email, self.USER_EMAIL)
+        self.assertEqual(user.pending_email, new_email)
+
+    def test_confirm_email_change_applies_pending(self):
+        from django.utils.encoding import force_bytes
+        from django.utils.http import urlsafe_base64_encode
+
+        from users.tokens import email_change_token
+
+        user = self.create_user(is_approved=True)
+        user.pending_email = "ada.new@example.com"
+        user.save(update_fields=["pending_email"])
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        token = email_change_token.make_token(user)
+
+        response = self.client.post(
+            reverse("auth-confirm-email-change"),
+            {"uid": uid, "token": token},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        user.refresh_from_db()
+        self.assertEqual(user.email, "ada.new@example.com")
+        self.assertEqual(user.username, "ada.new@example.com")
+        self.assertIsNone(user.pending_email)
+
+    def test_change_password_requires_auth(self):
+        response = self.client.post(
+            reverse("auth-change-password"),
+            {
+                "current_password": self.PASSWORD,
+                "new_password": "new-password-99",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_change_password_rejects_same_as_current(self):
+        user = self.create_user(is_approved=True)
+        self.authenticate_as(user)
+
+        response = self.client.post(
+            reverse("auth-change-password"),
+            {
+                "current_password": self.PASSWORD,
+                "new_password": self.PASSWORD,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("different", response.data["detail"].lower())
+
+    def test_change_email_requires_auth(self):
+        response = self.client.post(
+            reverse("auth-change-email"),
+            {
+                "new_email": "ada.new@example.com",
+                "current_password": self.PASSWORD,
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_change_email_rejects_wrong_password(self):
+        user = self.create_user(is_approved=True)
+        self.authenticate_as(user)
+
+        response = self.client.post(
+            reverse("auth-change-email"),
+            {
+                "new_email": "ada.new@example.com",
+                "current_password": self.WRONG_PASSWORD,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertIsNone(user.pending_email)
+
+    def test_change_email_rejects_same_email(self):
+        user = self.create_user(is_approved=True)
+        self.authenticate_as(user)
+
+        response = self.client.post(
+            reverse("auth-change-email"),
+            {
+                "new_email": self.USER_EMAIL,
+                "current_password": self.PASSWORD,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_change_email_rejects_taken_email(self):
+        self.create_user(email="other@example.com", is_approved=True)
+        user = self.create_user(is_approved=True)
+        self.authenticate_as(user)
+
+        response = self.client.post(
+            reverse("auth-change-email"),
+            {
+                "new_email": "other@example.com",
+                "current_password": self.PASSWORD,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertIsNone(user.pending_email)
+
+    def test_change_email_sends_mail_to_pending_address(self):
+        from django.core import mail
+
+        user = self.create_user(is_approved=True, first_name=self.FIRST_NAME)
+        self.authenticate_as(user)
+        new_email = "ada.new@example.com"
+
+        response = self.client.post(
+            reverse("auth-change-email"),
+            {
+                "new_email": new_email,
+                "current_password": self.PASSWORD,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [new_email])
+        self.assertIn("confirm_email_change=1", mail.outbox[0].body)
+        self.assertIn("Confirm your new email", mail.outbox[0].subject)
+
+    def test_change_email_clears_pending_when_delivery_fails(self):
+        from unittest.mock import patch
+
+        from notifications.services.email_provider import EmailDeliveryError
+
+        user = self.create_user(is_approved=True)
+        self.authenticate_as(user)
+
+        with patch(
+            "users.views.send_email_change_confirmation",
+            side_effect=EmailDeliveryError("SES could not deliver the email."),
+        ):
+            response = self.client.post(
+                reverse("auth-change-email"),
+                {
+                    "new_email": "ada.new@example.com",
+                    "current_password": self.PASSWORD,
+                },
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        user.refresh_from_db()
+        self.assertIsNone(user.pending_email)
+
+    def test_confirm_email_change_rejects_invalid_token(self):
+        from django.utils.encoding import force_bytes
+        from django.utils.http import urlsafe_base64_encode
+
+        user = self.create_user(is_approved=True)
+        user.pending_email = "ada.new@example.com"
+        user.save(update_fields=["pending_email"])
+
+        response = self.client.post(
+            reverse("auth-confirm-email-change"),
+            {
+                "uid": urlsafe_base64_encode(force_bytes(user.pk)),
+                "token": "not-a-real-token",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertEqual(user.email, self.USER_EMAIL)
+        self.assertEqual(user.pending_email, "ada.new@example.com")
+
+    def test_confirm_email_change_rejects_when_no_pending(self):
+        from django.utils.encoding import force_bytes
+        from django.utils.http import urlsafe_base64_encode
+
+        from users.tokens import email_change_token
+
+        user = self.create_user(is_approved=True)
+        # Token hash includes pending_email; craft after clearing is pointless —
+        # endpoint should fail because pending_email is empty.
+        uid = urlsafe_base64_encode(force_bytes(user.pk))
+        user.pending_email = "temp@example.com"
+        token = email_change_token.make_token(user)
+        user.pending_email = None
+        user.save(update_fields=["pending_email"])
+
+        response = self.client.post(
+            reverse("auth-confirm-email-change"),
+            {"uid": uid, "token": token},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("no pending email change", response.data["detail"].lower())
+
+    def test_me_includes_pending_email(self):
+        user = self.create_user(is_approved=True)
+        user.pending_email = "ada.new@example.com"
+        user.save(update_fields=["pending_email"])
+        self.authenticate_as(user)
+
+        response = self.client.get(self.me_url)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["pending_email"], "ada.new@example.com")

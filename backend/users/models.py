@@ -32,6 +32,9 @@ class UserManager(BaseUserManager):
 
 class User(AbstractUser):
     email = models.EmailField(unique=True, blank=False)
+    # Set while an email-change confirmation is outstanding; cleared on confirm/cancel.
+    # Login still uses `email` until the new address is confirmed.
+    pending_email = models.EmailField(null=True, blank=True, default=None)
     # Product roles: pending vs member (is_approved), plus garden admin.
     # is_staff / is_superuser stay Django-only (access to /admin/), not app roles.
     is_approved = models.BooleanField(default=False)

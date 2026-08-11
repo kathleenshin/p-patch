@@ -1,4 +1,5 @@
 from django.contrib.auth import authenticate
+from django.db import transaction
 from django.utils.encoding import force_str
 from django.utils.http import urlsafe_base64_decode
 from rest_framework import generics, permissions, status
@@ -6,10 +7,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .email_confirmation import send_confirmation_email
+from .email_confirmation import send_confirmation_email, send_email_change_confirmation
 from .models import User
 from .permissions import IsGardenAdmin
 from .serializers import (
+    ChangeEmailSerializer,
+    ChangePasswordSerializer,
+    ConfirmEmailChangeSerializer,
     ConfirmEmailSerializer,
     LoginSerializer,
     RegisterSerializer,
@@ -21,7 +25,8 @@ from .throttles import (
     AuthResendEmailThrottle,
     AuthResendIPThrottle,
 )
-from .tokens import email_confirmation_token
+from .tokens import email_change_token, email_confirmation_token
+from notifications.services.email_provider import EmailDeliveryError
 
 
 class UserListView(generics.ListAPIView):
@@ -50,7 +55,13 @@ class RegisterView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
-        send_confirmation_email(user)
+        try:
+            send_confirmation_email(user)
+        except EmailDeliveryError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         return Response(
             {
                 "detail": (
@@ -119,7 +130,13 @@ class ResendConfirmationView(APIView):
         except User.DoesNotExist:
             return Response(detail, status=status.HTTP_200_OK)
 
-        send_confirmation_email(user)
+        try:
+            send_confirmation_email(user)
+        except EmailDeliveryError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         return Response(detail, status=status.HTTP_200_OK)
 
 
@@ -166,6 +183,142 @@ class MeView(generics.RetrieveAPIView):
 
     def get_object(self):
         return self.request.user
+
+
+class ChangePasswordView(APIView):
+    """POST /api/auth/change-password/ — verify current password, set a new one."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangePasswordSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        current_password = serializer.validated_data["current_password"]
+        new_password = serializer.validated_data["new_password"]
+
+        if not user.check_password(current_password):
+            return Response(
+                {"detail": "Current password is incorrect."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if user.check_password(new_password):
+            return Response(
+                {"detail": "New password must be different from the current password."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.set_password(new_password)
+        user.save(update_fields=["password"])
+        # Stay logged in on this device (JWTs remain valid).
+        return Response({"detail": "Password updated."})
+
+
+class ChangeEmailView(APIView):
+    """POST /api/auth/change-email/ — password + confirm-before-switch to new address."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        serializer = ChangeEmailSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = request.user
+        new_email = serializer.validated_data["new_email"]
+        current_password = serializer.validated_data["current_password"]
+
+        if not user.check_password(current_password):
+            return Response(
+                {"detail": "Current password is incorrect."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if new_email.lower() == user.email.lower():
+            return Response(
+                {"detail": "New email must be different from your current email."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        # Taken by another account (active or not) — do not switch.
+        if User.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
+            return Response(
+                {"detail": "A user with this email already exists."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user.pending_email = new_email
+        user.save(update_fields=["pending_email"])
+        try:
+            send_email_change_confirmation(user)
+        except EmailDeliveryError as exc:
+            # Don't leave a pending change if the confirmation never left.
+            user.pending_email = None
+            user.save(update_fields=["pending_email"])
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        return Response(
+            {
+                "detail": (
+                    "Check your inbox at the new address to confirm the change. "
+                    "Your current email stays active until then."
+                ),
+                "pending_email": user.pending_email,
+            }
+        )
+
+
+class ConfirmEmailChangeView(APIView):
+    """POST /api/auth/confirm-email-change/ — apply pending_email after link confirm."""
+
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request):
+        serializer = ConfirmEmailChangeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        uid = serializer.validated_data["uid"]
+        token = serializer.validated_data["token"]
+
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.get(pk=user_id)
+        except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+            return Response(
+                {"detail": "Invalid confirmation link."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not user.pending_email:
+            return Response(
+                {"detail": "There is no pending email change for this account."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not email_change_token.check_token(user, token):
+            return Response(
+                {"detail": "Invalid or expired confirmation link."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        new_email = user.pending_email
+        # Race: another account claimed this address after the request was started.
+        if User.objects.filter(email__iexact=new_email).exclude(pk=user.pk).exists():
+            user.pending_email = None
+            user.save(update_fields=["pending_email"])
+            return Response(
+                {"detail": "This email is no longer available."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            user.email = new_email
+            user.username = new_email
+            user.pending_email = None
+            user.save(update_fields=["email", "username", "pending_email"])
+
+        return Response(
+            {
+                "detail": "Email updated.",
+                "user": UserSerializer(user).data,
+            }
+        )
 
 
 # --- Garden-admin approval loop (list / approve / reject pending users) ---

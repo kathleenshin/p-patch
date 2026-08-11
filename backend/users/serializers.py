@@ -11,6 +11,7 @@ class UserSerializer(serializers.ModelSerializer):
         fields = (
             "id",
             "email",
+            "pending_email",
             "first_name",
             "last_name",
             "is_approved",
@@ -76,3 +77,21 @@ class ConfirmEmailSerializer(serializers.Serializer):
 
 class ResendConfirmationSerializer(serializers.Serializer):
     email = serializers.EmailField()
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(write_only=True)
+    new_password = serializers.CharField(write_only=True, min_length=8)
+
+
+class ChangeEmailSerializer(serializers.Serializer):
+    new_email = serializers.EmailField()
+    current_password = serializers.CharField(write_only=True)
+
+    def validate_new_email(self, value):
+        return User.objects.normalize_email(value.strip())
+
+
+class ConfirmEmailChangeSerializer(serializers.Serializer):
+    uid = serializers.CharField()
+    token = serializers.CharField()

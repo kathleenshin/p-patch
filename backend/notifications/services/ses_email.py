@@ -84,9 +84,12 @@ class SESEmailService(EmailProvider):
                 },
             )
         except (BotoCoreError, ClientError) as exc:
-            raise EmailDeliveryError(
-                "SES could not deliver the email."
-            ) from exc
+            detail = "SES could not deliver the email."
+            response = getattr(exc, "response", None) or {}
+            aws_message = (response.get("Error") or {}).get("Message")
+            if aws_message:
+                detail = f"{detail} {aws_message}"
+            raise EmailDeliveryError(detail) from exc
 
         return EmailDeliveryResult(
             message_id=response.get("MessageId"),

@@ -80,6 +80,9 @@ class EmailConfirmationApiTests(APITestCase):
         self.assertFalse(user.is_approved)
         self.assertEqual(len(mail.outbox), 1)
         self.assertIn(self.USER_EMAIL, mail.outbox[0].to)
+        self.assertIn("Confirm your email", mail.outbox[0].subject)
+        self.assertIn("Judkins Park P-Patch", mail.outbox[0].body)
+        self.assertIn("garden admin", mail.outbox[0].body.lower())
         self.assertIn("confirm_email=1", mail.outbox[0].body)
         self.assertIn("uid=", mail.outbox[0].body)
         self.assertIn("token=", mail.outbox[0].body)
@@ -286,3 +289,40 @@ class EmailConfirmationApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         emails = [row["email"] for row in response.data]
         self.assertIn(self.USER_EMAIL, emails)
+
+    def test_register_delivery_failure_returns_502(self):
+        from unittest.mock import patch
+
+        from notifications.services.email_provider import EmailDeliveryError
+
+        with patch(
+            "users.views.send_confirmation_email",
+            side_effect=EmailDeliveryError("Sender email is not configured."),
+        ):
+            response = self.post_register()
+
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertIn("Sender email is not configured", response.data["detail"])
+        # User row may still exist from serializer.save(); focus is API status.
+        self.assertTrue(User.objects.filter(email=self.USER_EMAIL).exists())
+
+    def test_resend_delivery_failure_returns_502(self):
+        from unittest.mock import patch
+
+        from notifications.services.email_provider import EmailDeliveryError
+
+        self.post_register()
+        mail.outbox.clear()
+
+        with patch(
+            "users.views.send_confirmation_email",
+            side_effect=EmailDeliveryError("SES could not deliver the email."),
+        ):
+            response = self.client.post(
+                self.resend_url,
+                {"email": self.USER_EMAIL},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_502_BAD_GATEWAY)
+        self.assertEqual(len(mail.outbox), 0)

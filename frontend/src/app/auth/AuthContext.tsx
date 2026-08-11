@@ -8,7 +8,10 @@ import {
   type ReactNode,
 } from "react";
 import {
+  changeEmail as apiChangeEmail,
+  changePassword as apiChangePassword,
   confirmEmail as apiConfirmEmail,
+  confirmEmailChange as apiConfirmEmailChange,
   fetchMe,
   login as apiLogin,
   logout as apiLogout,
@@ -39,6 +42,10 @@ type AuthContextValue = {
   ) => Promise<RegisterResponse>;
   confirmEmail: (uid: string, token: string) => Promise<void>;
   resendConfirmation: (email: string) => Promise<string>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<string>;
+  changeEmail: (newEmail: string, currentPassword: string) => Promise<string>;
+  confirmEmailChange: (uid: string, token: string) => Promise<string>;
+  refreshUser: () => Promise<void>;
   logout: () => void;
 };
 
@@ -115,6 +122,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return data.detail;
   }, []);
 
+  const refreshUser = useCallback(async () => {
+    const token = accessToken ?? getAccessToken();
+    if (!token) return;
+    const me = await fetchMe(token);
+    setAccessToken(token);
+    setUser(me);
+  }, [accessToken]);
+
+  const changePassword = useCallback(
+    async (currentPassword: string, newPassword: string) => {
+      const token = accessToken ?? getAccessToken();
+      if (!token) throw new Error("You must be logged in.");
+      const data = await apiChangePassword(token, currentPassword, newPassword);
+      return data.detail;
+    },
+    [accessToken],
+  );
+
+  const changeEmail = useCallback(
+    async (newEmail: string, currentPassword: string) => {
+      const token = accessToken ?? getAccessToken();
+      if (!token) throw new Error("You must be logged in.");
+      const data = await apiChangeEmail(token, newEmail, currentPassword);
+      setUser((prev) =>
+        prev
+          ? { ...prev, pending_email: data.pending_email }
+          : prev,
+      );
+      return data.detail;
+    },
+    [accessToken],
+  );
+
+  const confirmEmailChange = useCallback(async (uid: string, token: string) => {
+    const data = await apiConfirmEmailChange(uid, token);
+    // If this session is the same user, refresh profile to the new email.
+    setUser((prev) => {
+      if (prev && prev.id === data.user.id) return data.user;
+      return prev;
+    });
+    return data.detail;
+  }, []);
+
   // Logout: drop tokens and clear in-memory auth state.
   const logout = useCallback(() => {
     apiLogout();
@@ -136,6 +186,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       confirmEmail,
       resendConfirmation,
+      changePassword,
+      changeEmail,
+      confirmEmailChange,
+      refreshUser,
       logout,
     }),
     [
@@ -146,6 +200,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       confirmEmail,
       resendConfirmation,
+      changePassword,
+      changeEmail,
+      confirmEmailChange,
+      refreshUser,
       logout,
     ],
   );

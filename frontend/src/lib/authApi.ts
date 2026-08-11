@@ -5,6 +5,8 @@ import { clearTokens, setTokens } from "./authStorage";
 export type AuthUser = {
   id: number;
   email: string;
+  /** Set while a confirm-before-switch email change is outstanding. */
+  pending_email?: string | null;
   first_name: string;
   last_name: string;
   is_approved: boolean;
@@ -84,6 +86,55 @@ export async function fetchMe(accessToken: string): Promise<AuthUser> {
     method: "GET",
     token: accessToken,
   });
+}
+
+/** POST /api/auth/change-password/ — requires current password. */
+export async function changePassword(
+  accessToken: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ detail: string }> {
+  return apiFetch<{ detail: string }>("/api/auth/change-password/", {
+    method: "POST",
+    token: accessToken,
+    body: {
+      current_password: currentPassword,
+      new_password: newPassword,
+    },
+  });
+}
+
+/** POST /api/auth/change-email/ — password + confirm-before-switch. */
+export async function changeEmail(
+  accessToken: string,
+  newEmail: string,
+  currentPassword: string,
+): Promise<{ detail: string; pending_email: string }> {
+  return apiFetch<{ detail: string; pending_email: string }>(
+    "/api/auth/change-email/",
+    {
+      method: "POST",
+      token: accessToken,
+      body: {
+        new_email: newEmail,
+        current_password: currentPassword,
+      },
+    },
+  );
+}
+
+/** POST /api/auth/confirm-email-change/ — apply pending email from link tokens. */
+export async function confirmEmailChange(
+  uid: string,
+  token: string,
+): Promise<{ detail: string; user: AuthUser }> {
+  return apiFetch<{ detail: string; user: AuthUser }>(
+    "/api/auth/confirm-email-change/",
+    {
+      method: "POST",
+      body: { uid, token },
+    },
+  );
 }
 
 /** POST /api/auth/refresh/ — exchange refresh token for a new access token.

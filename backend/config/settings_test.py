@@ -11,6 +11,8 @@ DATABASES = {
 
 # Never send real emails during tests.
 EMAIL_PROVIDER = "console"
+NOTIFICATIONS_EMAIL_SENDER = "sender@example.com"
+DEFAULT_FROM_EMAIL = "sender@example.com"
 # Keep photo uploads on the local filesystem during tests (never hit real S3).
 USE_S3 = False
 MEDIA_URL = "/media/"
