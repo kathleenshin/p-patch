@@ -22,66 +22,151 @@ export interface UserOption {
 }
 
 /** Unclaimed = no assignee and not completed (Admin Unclaimed Tasks panel). */
-export function isUnclaimedHelpRequest(request: HelpRequest): boolean {
-  return request.assigned_to == null && request.status !== "done";
+export function isUnclaimedHelpRequest(
+  request: HelpRequest,
+): boolean {
+  return (
+    request.assigned_to == null &&
+    request.status !== "done"
+  );
 }
 
 /** List help requests (pass JWT; required once authz is IsApproved). */
-export async function fetchHelpRequests(accessToken: string): Promise<HelpRequest[]> {
-  return apiFetch<HelpRequest[]>("/api/help-requests/", { token: accessToken });
+export async function fetchHelpRequests(
+  accessToken: string,
+): Promise<HelpRequest[]> {
+  return apiFetch<HelpRequest[]>(
+    "/api/help-requests/",
+    {
+      token: accessToken,
+    },
+  );
 }
 
-export async function createHelpRequest(accessToken: string, payload: {
-  title: string;
-  description: string;
-  priority: string;
-  category: string;
-  due_date: string | null;
-  assigned_to: number | null;
-  garden: number;
-  plot?: number | null;
-}): Promise<HelpRequest> {
-  return apiFetch<HelpRequest>('/api/help-requests/', {
-    method: 'POST',
-    token: accessToken,
-    body: payload,
-  });
+export async function createHelpRequest(
+  accessToken: string,
+  payload: {
+    title: string;
+    description: string;
+    priority: string;
+    category: string;
+    due_date: string | null;
+    assigned_to: number | null;
+    garden: number;
+    plot?: number | null;
+  },
+): Promise<HelpRequest> {
+  return apiFetch<HelpRequest>(
+    "/api/help-requests/",
+    {
+      method: "POST",
+      token: accessToken,
+      body: payload,
+    },
+  );
 }
 
 export async function updateHelpRequest(
   accessToken: string,
   id: number,
-  payload: Partial<HelpRequest> & { status?: string },
+  payload: Partial<HelpRequest> & {
+    status?: string;
+  },
 ): Promise<HelpRequest> {
-  return apiFetch<HelpRequest>(`/api/help-requests/${id}/`, {
-    method: 'PATCH',
-    token: accessToken,
-    body: payload,
-  });
+  return apiFetch<HelpRequest>(
+    `/api/help-requests/${id}/`,
+    {
+      method: "PATCH",
+      token: accessToken,
+      body: payload,
+    },
+  );
 }
 
-export async function deleteHelpRequest(accessToken: string, id: number): Promise<void> {
-  await apiFetch<void>(`/api/help-requests/${id}/`, {
-    method: 'DELETE',
-    token: accessToken,
-  });
+export async function deleteHelpRequest(
+  accessToken: string,
+  id: number,
+): Promise<void> {
+  await apiFetch(
+    `/api/help-requests/${id}/`,
+    {
+      method: "DELETE",
+      token: accessToken,
+    },
+  );
 }
 
-export async function fetchUsers(accessToken: string): Promise<UserOption[]> {
-  const data = await apiFetch<unknown>('/api/help-requests/assignees/', {
-    method: 'GET',
-    token: accessToken,
-  });
-  return Array.isArray(data) ? (data as UserOption[]) : [];
+export async function fetchUsers(
+  accessToken: string,
+): Promise<UserOption[]> {
+  const data = await apiFetch(
+    "/api/help-requests/assignees/",
+    {
+      method: "GET",
+      token: accessToken,
+    },
+  );
+
+  return Array.isArray(data)
+    ? (data as UserOption[])
+    : [];
+}
+
+/** Claim an unclaimed help request. */
+export async function claimHelpRequest(
+  accessToken: string,
+  id: number,
+): Promise<HelpRequest> {
+  return apiFetch<HelpRequest>(
+    `/api/help-requests/${id}/claim/`,
+    {
+      method: "POST",
+      token: accessToken,
+    },
+  );
+}
+
+/** Return a claimed help request to the active/unclaimed state. */
+export async function unclaimHelpRequest(
+  accessToken: string,
+  id: number,
+): Promise<HelpRequest> {
+  return apiFetch<HelpRequest>(
+    `/api/help-requests/${id}/unclaim/`,
+    {
+      method: "POST",
+      token: accessToken,
+    },
+  );
+}
+
+/** Mark a claimed help request as completed. */
+export async function completeHelpRequest(
+  accessToken: string,
+  id: number,
+): Promise<HelpRequest> {
+  return apiFetch<HelpRequest>(
+    `/api/help-requests/${id}/complete/`,
+    {
+      method: "POST",
+      token: accessToken,
+    },
+  );
 }
 
 /** Garden-admin only: re-broadcast claim email for an unclaimed help request. */
 export async function resendHelpRequestClaim(
   accessToken: string,
   id: number,
-): Promise<{ detail: string; recipients: number }> {
-  return apiFetch(`/api/help-requests/${id}/resend-claim/`, {
-    method: "POST",
-    token: accessToken,
-  });
+): Promise<{
+  detail: string;
+  recipients: number;
+}> {
+  return apiFetch(
+    `/api/help-requests/${id}/resend-claim/`,
+    {
+      method: "POST",
+      token: accessToken,
+    },
+  );
 }

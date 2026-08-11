@@ -83,17 +83,6 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
             created_by=self.request.user
         )
 
-        # Email every active garden member.
-        # Never block request creation on mail failure.
-        try:
-            notify_new_help_request(help_request)
-        except EmailDeliveryError:
-            logger.exception(
-                "Failed to send new help request notification %s",
-                help_request.pk,
-            )
-
-        # High-priority requests also notify stewards/admins.
         if help_request.priority == HelpRequest.Priority.HIGH:
             try:
                 notify_urgent_help_request(help_request)
@@ -102,7 +91,7 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
                     "Failed to send urgent help request notification %s",
                     help_request.pk,
                 )
-
+                
     def claim(self, request, pk=None):
         with transaction.atomic():
             help_request = get_object_or_404(
