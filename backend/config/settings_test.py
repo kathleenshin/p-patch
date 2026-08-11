@@ -25,6 +25,8 @@ STORAGES = {
     },
 }
 
+USE_MOCK_WEATHER = False
+
 # Auth suites register/resend many times from one IP; keep production rates elsewhere.
 REST_FRAMEWORK = {
     **REST_FRAMEWORK,  # noqa: F405

@@ -28,6 +28,65 @@ class PlotOwnershipModelTests(BasePlotTestCase):
 
         self.assertIsNone(ownership.end_date)
 
+    def test_current_ownership_reactivates_inactive_plot_on_create(self):
+        self.plot.is_active = False
+        self.plot.save(update_fields=["is_active"])
+
+        PlotOwnership.objects.create(
+            user=self.user_one,
+            plot=self.plot,
+            start_date=self.d1,
+            end_date=None,
+        )
+
+        self.plot.refresh_from_db()
+        self.assertTrue(self.plot.is_active)
+
+    def test_historical_ownership_does_not_reactivate_inactive_plot(self):
+        self.plot.is_active = False
+        self.plot.save(update_fields=["is_active"])
+
+        PlotOwnership.objects.create(
+            user=self.user_one,
+            plot=self.plot,
+            start_date=self.d1,
+            end_date=self.d2,
+        )
+
+        self.plot.refresh_from_db()
+        self.assertFalse(self.plot.is_active)
+
+    def test_reactivated_when_existing_ownership_becomes_current(self):
+        self.plot.is_active = False
+        self.plot.save(update_fields=["is_active"])
+
+        ownership = PlotOwnership.objects.create(
+            user=self.user_one,
+            plot=self.plot,
+            start_date=self.d1,
+            end_date=self.d2,
+        )
+
+        ownership.end_date = None
+        ownership.save(update_fields=["end_date"])
+
+        self.plot.refresh_from_db()
+        self.assertTrue(self.plot.is_active)
+
+    def test_current_ownership_keeps_already_active_plot_active(self):
+        self.plot.is_active = True
+        self.plot.save(update_fields=["is_active"])
+
+        PlotOwnership.objects.create(
+            user=self.user_one,
+            plot=self.plot,
+            start_date=self.d1,
+            end_date=None,
+        )
+
+        self.plot.refresh_from_db()
+        self.assertTrue(self.plot.is_active)
+
     def test_cascade_on_plot_delete(self):
         ownership = PlotOwnership.objects.create(
             user=self.user_one,

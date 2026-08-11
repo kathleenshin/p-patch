@@ -9,6 +9,7 @@ import {
 import { C, serif, sans, mono, linkStyle } from "../theme";
 import type { Screen } from "../types";
 import { DayForecastWidget } from "../components/weather/DayForecastWidget";
+import { WeekWeatherWidget } from "../components/weather/WeekWeatherWidget";
 import { PlotPhotoCropModal } from "../components/plot/PlotPhotoCropModal";
 import { usePlots } from "../hooks/usePlots";
 import { usePlotNotes } from "../hooks/usePlotNotes";
@@ -82,6 +83,11 @@ export function PlotScreen({
   const { weather, weatherLoading, weatherError } = useWeather(
     focusPlot?.garden ?? null,
   );
+  const [selectedForecastDate, setSelectedForecastDate] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedForecastDate(null);
+  }, [focusPlot?.garden]);
 
   // Prefer the newest uploaded photo for the hero; fall back to bundled art.
   // Gallery of older photos is disabled for now — only the latest is kept in state.
@@ -1000,7 +1006,14 @@ export function PlotScreen({
               weather={weather}
               weatherLoading={weatherLoading}
               weatherError={weatherError}
-              showWeekLink
+              selectedDate={selectedForecastDate}
+            />
+            <WeekWeatherWidget
+              weather={weather}
+              weatherLoading={weatherLoading}
+              weatherError={weatherError}
+              selectedDate={selectedForecastDate}
+              onSelectDate={setSelectedForecastDate}
             />
 
             {/* Secondary Owners */}

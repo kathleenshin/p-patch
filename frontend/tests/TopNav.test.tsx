@@ -110,7 +110,10 @@ describe("TopNav", () => {
     });
 
     expect(screen.getByText("A")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /Logout/i }));
+    await user.click(
+      screen.getByRole("button", { name: /Account menu/i }),
+    );
+    await user.click(screen.getByRole("menuitem", { name: /Log out/i }));
     expect(logoutMock).toHaveBeenCalled();
   });
 });

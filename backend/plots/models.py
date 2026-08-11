@@ -199,8 +199,20 @@ class PlotOwnership(models.Model):
             membership.status = "active"
             membership.save(update_fields=["status"])
 
+    def ensure_plot_is_active(self):
+        """A current ownership requires an active plot."""
+
+        if self.end_date is not None:
+            return
+
+        Plot.objects.filter(
+            pk=self.plot_id,
+            is_active=False,
+        ).update(is_active=True)
+
     def save(self, *args, **kwargs):
         super().save(*args, **kwargs)
+        self.ensure_plot_is_active()
         self.ensure_garden_membership()
 
     @classmethod

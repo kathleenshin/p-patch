@@ -304,3 +304,7 @@ EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
 # Used in confirmation links emailed to new registrants.
 # Prefer "localhost" over 127.0.0.1 — Vite often binds IPv6 localhost only.
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").strip().rstrip("/")
+
+# Temporary deployment fallback: when the public Open-Meteo endpoint rate-limits
+# requests from Render, enable deterministic mock weather with no external calls.
+USE_MOCK_WEATHER = os.getenv("USE_MOCK_WEATHER", "False").lower() == "true"
