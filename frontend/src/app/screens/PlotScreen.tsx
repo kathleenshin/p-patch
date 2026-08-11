@@ -403,7 +403,12 @@ export function PlotScreen({
             {/* Header */}
             <div
               style={{
-                padding: "0.625rem 0.25rem",
+                background: C.card,
+                border: `0.0625rem solid ${C.border}`,
+                borderRadius: "0.8125rem",
+                padding: "0.75rem 0.875rem",
+                boxShadow:
+                  "0 0.0625rem 0.25rem rgba(44,31,20,0.05)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "space-between",
@@ -1083,23 +1088,8 @@ export function PlotScreen({
                 </div>
               )}
 
-              <button
-                style={{
-                  marginTop: "0.5rem",
-                  width: "100%",
-                  background: C.creamDark,
-                  border: "none",
-                  borderRadius: "0.4375rem",
-                  padding: "0.3125rem 0.5rem",
-                  fontSize: "0.68rem",
-                  fontWeight: 700,
-                  color: C.brownLight,
-                  cursor: "pointer",
-                  fontFamily: "'Nunito', sans-serif",
-                }}
-              >
-                Manage stewards
-              </button>
+              {/* Manage stewards button intentionally hidden until feature implementation. */}
+
             </div>
             {/* Quick Actions */}
             <div
