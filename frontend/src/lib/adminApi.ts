@@ -38,7 +38,7 @@ export async function rejectUser(
   });
 }
 
-/** GET /api/auth/users/ — all users (garden admin only); filter for approved count. */
+/** GET /api/auth/users/ — all users (garden admin only); filter for approved assignees. */
 export async function fetchUsers(accessToken: string): Promise<AuthUser[]> {
   return apiFetch<AuthUser[]>("/api/auth/users/", {
     method: "GET",

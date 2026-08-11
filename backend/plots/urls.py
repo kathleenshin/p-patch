@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    PlotAssignView,
     PlotDetailView,
     PlotListCreateView,
     PlotNoteDetailView,
@@ -20,6 +21,12 @@ urlpatterns = [
         "plots/<int:pk>/",
         PlotDetailView.as_view(),
         name="plot-detail",
+    ),
+    # Garden-admin: POST { "user_id": N } → primary PlotOwnership on an empty plot.
+    path(
+        "plots/<int:pk>/assign/",
+        PlotAssignView.as_view(),
+        name="plot-assign",
     ),
     path(
         "plot-notes/",

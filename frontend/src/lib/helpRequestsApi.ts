@@ -31,6 +31,14 @@ export function isUnclaimedHelpRequest(
   );
 }
 
+/**
+ * Admin Unclaimed Tasks card/popup: unclaimed + high urgency only.
+ * priority "high" is the API value for urgent (same as notify_urgent_help_request).
+ */
+export function isUnclaimedUrgentHelpRequest(request: HelpRequest): boolean {
+  return isUnclaimedHelpRequest(request) && request.priority === "high";
+}
+
 /** List help requests (pass JWT; required once authz is IsApproved). */
 export async function fetchHelpRequests(
   accessToken: string,
