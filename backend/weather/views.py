@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.shortcuts import get_object_or_404
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -7,6 +8,7 @@ from rest_framework.views import APIView
 from plots.models import Garden
 
 from .services.air_quality import AirQualityService, AirQualityServiceError
+from .services.mock_weather import MockWeatherService
 from .services.open_meteo import OpenMeteoService, WeatherServiceError
 
 
@@ -44,6 +46,12 @@ class WeatherForecastView(APIView):
             "latitude": float(garden.latitude),
             "longitude": float(garden.longitude),
         }
+
+        # Temporary deployment fallback for external provider rate limiting.
+        if settings.USE_MOCK_WEATHER:
+            return Response(
+                MockWeatherService.get_forecast(**coordinates)
+            )
 
         try:
             data = OpenMeteoService.get_forecast(**coordinates)
