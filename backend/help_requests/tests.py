@@ -116,6 +116,42 @@ class HelpRequestAPITests(APITestCase):
 
         self.assertNotIn(help_request.id, returned_ids)
 
+    def test_old_completed_help_request_is_excluded_from_list(self):
+        completed_request = HelpRequest.objects.create(
+            title="Completed long ago",
+            description="This was finished well before cutoff.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+            assigned_to=self.user,
+            status=HelpRequest.Status.DONE,
+            completed_at=timezone.now() - datetime.timedelta(days=8),
+        )
+
+        response = self.client.get(reverse("help-request-list"))
+
+        returned_ids = [row["id"] for row in response.data]
+
+        self.assertNotIn(completed_request.id, returned_ids)
+
+    def test_recent_completed_help_request_is_included_in_list(self):
+        completed_request = HelpRequest.objects.create(
+            title="Completed recently",
+            description="This was finished within retention window.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+            assigned_to=self.user,
+            status=HelpRequest.Status.DONE,
+            completed_at=timezone.now() - datetime.timedelta(days=3),
+        )
+
+        response = self.client.get(reverse("help-request-list"))
+
+        returned_ids = [row["id"] for row in response.data]
+
+        self.assertIn(completed_request.id, returned_ids)
+
     def test_create_help_request(self):
         response = self.client.post(
             reverse("help-request-list"),

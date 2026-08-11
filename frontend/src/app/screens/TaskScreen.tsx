@@ -13,7 +13,6 @@ import {
   fetchHelpRequests,
   fetchUsers,
   unclaimHelpRequest,
-  updateHelpRequest,
   type HelpRequest,
   type UserOption,
 } from "../../lib/helpRequestsApi";
@@ -37,7 +36,7 @@ const categoryOptions = [
 ] as const;
 
 const initialColumns: Column[] = [
-  { id: "active", label: "Active", accent: C.terra, tasks: [] },
+  { id: "active", label: "Unclaimed", accent: C.terra, tasks: [] },
   { id: "pending", label: "Claimed", accent: C.amber, tasks: [] },
   { id: "done", label: "Done", accent: C.sage, tasks: [] },
 ];
@@ -60,14 +59,8 @@ export function TaskScreen() {
   const [statusChangingId, setStatusChangingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<HelpRequest | null>(null);
-  const [editTitle, setEditTitle] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editPriority, setEditPriority] = useState("medium");
-  const [editCategory, setEditCategory] = useState("other");
-  const [editDueDate, setEditDueDate] = useState("");
-  const [editPlotSelection, setEditPlotSelection] = useState("");
+  const [showCompleteSuccess, setShowCompleteSuccess] = useState(false);
   const [users, setUsers] = useState<UserOption[]>([]);
-  const [isSavingDetails, setIsSavingDetails] = useState(false);
   const colBg: Record<string, string> = { active: "#FFF4F0", pending: "#FFFBEE", done: "#F2FAF2" };
   const requestColumnMap: Record<string, string> = {
     active: "active",
@@ -80,9 +73,9 @@ export function TaskScreen() {
     done: C.sage,
   };
   const statusLabel: Record<string, string> = {
-    active: "Active",
+    active: "Unclaimed",
     pending: "Claimed",
-    done: "Done",
+    done: "Complete",
   };
 
   const loadRequests = async () => {
@@ -136,25 +129,31 @@ export function TaskScreen() {
     return plot ? `Plot #${plot.plot_number}` : "Plot (number unavailable)";
   };
 
-  const plotOptions = [...plots]
-    .sort((a, b) => {
-      const gardenCompare = a.garden_name.localeCompare(b.garden_name);
-      if (gardenCompare !== 0) {
-        return gardenCompare;
-      }
+  const getPriorityLabel = (value: string) =>
+    priorityOptions.find((option) => option.value === value)?.label ?? value;
 
-      return a.plot_number.localeCompare(b.plot_number, undefined, {
-        numeric: true,
-      });
-    })
-    .map((plot) => ({
-      value: `${plot.id}`,
-      gardenId: plot.garden,
-      label: `Plot #${plot.plot_number} (${plot.garden_name})`,
-    }));
+  const getCategoryLabel = (value: string) =>
+    categoryOptions.find((option) => option.value === value)?.label ?? value;
 
-  const getSelectedPlotOption = (value: string) =>
-    plotOptions.find((option) => option.value === value) ?? null;
+  const getStatusDisplayText = (request: HelpRequest) => {
+    if (request.status === "active") {
+      return "Unclaimed";
+    }
+
+    if (request.status === "done") {
+      return "Complete";
+    }
+
+    if (request.status === "pending" && request.assigned_to === user?.id) {
+      return "Claimed by you";
+    }
+
+    if (request.status === "pending" && request.assigned_to != null) {
+      return "Claimed";
+    }
+
+    return statusLabel[request.status] ?? request.status;
+  };
 
   useEffect(() => {
     void loadRequests();
@@ -228,6 +227,7 @@ export function TaskScreen() {
       );
 
       setSelectedRequest(data);
+      setShowCompleteSuccess(false);
       invalidatePlotsCache();
       setSuccess("Help request claimed.");
     } catch (err) {
@@ -261,6 +261,7 @@ export function TaskScreen() {
       );
 
       setSelectedRequest(data);
+      setShowCompleteSuccess(false);
       invalidatePlotsCache();
       setSuccess("Help request unclaimed.");
     } catch (err) {
@@ -294,6 +295,7 @@ export function TaskScreen() {
       );
 
       setSelectedRequest(data);
+      setShowCompleteSuccess(true);
       invalidatePlotsCache();
       setSuccess("Help request completed.");
     } catch (err) {
@@ -331,72 +333,9 @@ export function TaskScreen() {
 
   const openRequestDetails = (request: HelpRequest) => {
     setSelectedRequest(request);
-    setEditTitle(request.title);
-    setEditDescription(request.description);
-    setEditPriority(request.priority);
-    setEditCategory(request.category);
-    setEditDueDate(request.due_date ?? "");
-    setEditPlotSelection(request.plot ? String(request.plot) : "");
+    setShowCompleteSuccess(false);
     setError(null);
     setSuccess(null);
-  };
-
-  const handleUpdateRequestDetails = async () => {
-    if (!selectedRequest) {
-      return;
-    }
-
-    if (!accessToken) {
-      setError("Please log in to update help requests.");
-      return;
-    }
-
-    setIsSavingDetails(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      const selectedPlot = getSelectedPlotOption(editPlotSelection);
-      const originalPlotSelection = selectedRequest.plot
-        ? String(selectedRequest.plot)
-        : "";
-      const plotSelectionChanged = editPlotSelection !== originalPlotSelection;
-
-      if (plotSelectionChanged && editPlotSelection !== "" && !selectedPlot) {
-        setError("Selected plot is no longer available. Please reselect a plot.");
-        return;
-      }
-
-      const payload: Partial<HelpRequest> = {
-        title: editTitle,
-        description: editDescription,
-        priority: editPriority,
-        category: editCategory,
-        due_date: editDueDate || null,
-      };
-
-      if (plotSelectionChanged) {
-        if (editPlotSelection === "") {
-          // Only clear the plot when user explicitly picks "No plot".
-          payload.plot = null;
-        } else if (selectedPlot) {
-          payload.plot = Number(selectedPlot.value);
-          payload.garden = selectedPlot.gardenId;
-        }
-      }
-
-      const data = await updateHelpRequest(accessToken, selectedRequest.id, payload);
-
-      setRequests((current) => current.map((request) => (request.id === selectedRequest.id ? data : request)));
-      invalidatePlotsCache();
-      setSelectedRequest(null);
-      setSuccess("Help request updated.");
-      void loadRequests();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to update the help request.");
-    } finally {
-      setIsSavingDetails(false);
-    }
   };
 
   return (
@@ -425,7 +364,7 @@ export function TaskScreen() {
         <div className="task-board-cols">
           {columns.map((col) => (
             <div key={col.id}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.4375rem", marginBottom: "0.6875rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4375rem", marginBottom: "0.6875rem", paddingLeft: "0.7rem" }}>
                 <span style={{ fontSize: "0.7rem", fontWeight: 800, color: col.accent,
                   textTransform: "uppercase", letterSpacing: "0.08em", ...mono }}>{col.label}</span>
                 <span style={{ background: col.accent, color: C.white, borderRadius: "1.25rem",
@@ -546,183 +485,264 @@ export function TaskScreen() {
               <h3 style={{ ...serif, fontSize: "1.05rem", fontWeight: 700, color: C.brown, margin: 0 }}>
                 Help Request Details
               </h3>
-              <button onClick={() => setSelectedRequest(null)}
+              <button onClick={() => {
+                setShowCompleteSuccess(false);
+                setSelectedRequest(null);
+              }}
                 style={{ background: "none", border: "none", cursor: "pointer", color: C.muted }}>
                 <X size={17} />
               </button>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.6875rem" }}>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Title</label>
-                <input
-                  value={editTitle}
-                  onChange={(e) => setEditTitle(e.target.value)}
-                  placeholder="Task title"
-                  style={{ ...inputStyle, fontSize: "0.84rem" }}
-                />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Description</label>
-                <textarea
-                  value={editDescription}
-                  onChange={(e) => setEditDescription(e.target.value)}
-                  placeholder="Description..."
-                  style={{ ...inputStyle, minHeight: "4.75rem", resize: "vertical", fontSize: "0.84rem",
-                    fontFamily: "'Nunito', sans-serif" } as CSSProperties}
-                />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Status</label>
-                <div
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    width: "fit-content",
-                    padding: "0.4rem 0.65rem",
-                    borderRadius: "999px",
-                    background: `${statusColor[selectedRequest.status] ?? C.border}22`,
-                    color: statusColor[selectedRequest.status] ?? C.brownMid,
-                    fontSize: "0.75rem",
-                    fontWeight: 800,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                    ...mono,
-                  }}
-                >
-                  {statusLabel[selectedRequest.status] ?? selectedRequest.status}
+            {showCompleteSuccess && selectedRequest.status === "done" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.875rem" }}>
+                <div style={{ fontSize: "1rem", fontWeight: 800, color: C.sageDark, ...serif }}>
+                  Thanks for completing this task!
                 </div>
-              </div>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                {selectedRequest.status === "active" && selectedRequest.assigned_to == null && (
-                  <button
-                    onClick={() => handleClaimRequest(selectedRequest.id)}
-                    disabled={statusChangingId === selectedRequest.id}
-                    style={{
-                      background: C.amber,
-                      color: C.white,
-                      border: "none",
-                      borderRadius: "0.75rem",
-                      padding: "0.75rem",
-                      fontWeight: 800,
-                      cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
-                      fontFamily: "'Nunito', sans-serif",
-                      fontSize: "0.88rem",
-                      opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
-                    }}
-                  >
-                    Claim Task
-                  </button>
-                )}
-                {selectedRequest.status === "pending" && (isGardenAdmin || selectedRequest.assigned_to === user?.id) && (
-                  <>
-                    <button
-                      onClick={() => handleUnclaimRequest(selectedRequest.id)}
-                      disabled={statusChangingId === selectedRequest.id}
-                      style={{
-                        background: C.creamDark,
-                        color: C.brownMid,
-                        border: "none",
-                        borderRadius: "0.75rem",
-                        padding: "0.75rem",
-                        fontWeight: 800,
-                        cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
-                        fontFamily: "'Nunito', sans-serif",
-                        fontSize: "0.88rem",
-                        opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
-                      }}
-                    >
-                      Unclaim Task
-                    </button>
-                    <button
-                      onClick={() => handleCompleteRequest(selectedRequest.id)}
-                      disabled={statusChangingId === selectedRequest.id}
-                      style={{
-                        background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
-                        color: C.white,
-                        border: "none",
-                        borderRadius: "0.75rem",
-                        padding: "0.75rem",
-                        fontWeight: 800,
-                        cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
-                        fontFamily: "'Nunito', sans-serif",
-                        fontSize: "0.88rem",
-                        opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
-                      }}
-                    >
-                      Mark Complete
-                    </button>
-                  </>
-                )}
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Priority</label>
-                <select
-                  value={editPriority}
-                  onChange={(event) => setEditPriority(event.target.value)}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}>
-                  {priorityOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Request type</label>
-                <select
-                  value={editCategory}
-                  onChange={(event) => setEditCategory(event.target.value)}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}>
-                  {categoryOptions.map((option) => (
-                    <option key={option.value} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Due date</label>
-                <input
-                  type="date"
-                  value={editDueDate}
-                  onChange={(event) => setEditDueDate(event.target.value)}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
-                />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Plot number (optional)</label>
-                <select
-                  value={editPlotSelection}
-                  onChange={(event) => setEditPlotSelection(event.target.value)}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
-                >
-                  <option value="">No plot</option>
-                  {plotOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                <button onClick={handleUpdateRequestDetails} disabled={isSavingDetails}
-                  style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
-                    color: C.white, border: "none", borderRadius: "0.75rem", padding: "0.75rem",
-                    fontWeight: 800, cursor: isSavingDetails ? "wait" : "pointer", fontFamily: "'Nunito', sans-serif",
-                    fontSize: "0.88rem", opacity: isSavingDetails ? 0.75 : 1, flex: 1 }}>
-                  {isSavingDetails ? "Saving…" : "Save Changes"}
-                </button>
+                <div style={{ fontSize: "0.76rem", color: C.muted, lineHeight: 1.5 }}>
+                  This request was moved to Complete and the board has been updated.
+                </div>
                 <button
                   onClick={() => {
-                    if (window.confirm("Delete this help request?")) {
-                      handleDeleteRequest(selectedRequest.id);
-                      setSelectedRequest(null);
-                    }
+                    setShowCompleteSuccess(false);
+                    setSelectedRequest(null);
                   }}
-                  disabled={deletingId === selectedRequest.id}
-                  style={{ background: C.creamDark, border: "none", borderRadius: "0.75rem",
-                    padding: "0.75rem 0.85rem", fontSize: "0.88rem", fontWeight: 800,
-                    color: C.terra, cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>
-                  {deletingId === selectedRequest.id ? "..." : "Delete"}
+                  style={{
+                    background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
+                    color: C.white,
+                    border: "none",
+                    borderRadius: "0.75rem",
+                    padding: "0.75rem",
+                    fontWeight: 800,
+                    cursor: "pointer",
+                    fontFamily: "'Nunito', sans-serif",
+                    fontSize: "0.88rem",
+                  }}
+                >
+                  Close
                 </button>
               </div>
-            </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.6875rem" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: C.muted, fontWeight: 700 }}>Title</div>
+                  <div style={{ fontSize: "0.94rem", color: C.brown, fontWeight: 700, ...serif }}>{selectedRequest.title}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                  <div style={{ fontSize: "0.72rem", color: C.muted, fontWeight: 700 }}>Description</div>
+                  <div style={{ fontSize: "0.82rem", color: C.brownLight, lineHeight: 1.5 }}>{selectedRequest.description}</div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+                  <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Status</label>
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      width: "fit-content",
+                      padding: "0.4rem 0.65rem",
+                      borderRadius: "999px",
+                      background: `${statusColor[selectedRequest.status] ?? C.border}22`,
+                      color: statusColor[selectedRequest.status] ?? C.brownMid,
+                      fontSize: "0.75rem",
+                      fontWeight: 800,
+                      textTransform: "uppercase",
+                      letterSpacing: "0.04em",
+                      ...mono,
+                    }}
+                  >
+                    {getStatusDisplayText(selectedRequest)}
+                  </div>
+                </div>
+                <div style={{ display: "grid", gap: "0.5rem", gridTemplateColumns: "repeat(2, minmax(0, 1fr))" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                    <div style={{ fontSize: "0.68rem", color: C.muted, fontWeight: 700 }}>Plot</div>
+                    <div style={{ fontSize: "0.78rem", color: C.brownMid }}>{getPlotNumberLabel(selectedRequest.plot)}</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                    <div style={{ fontSize: "0.68rem", color: C.muted, fontWeight: 700 }}>Priority</div>
+                    <div style={{ fontSize: "0.78rem", color: C.brownMid }}>{getPriorityLabel(selectedRequest.priority)}</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                    <div style={{ fontSize: "0.68rem", color: C.muted, fontWeight: 700 }}>Category</div>
+                    <div style={{ fontSize: "0.78rem", color: C.brownMid }}>{getCategoryLabel(selectedRequest.category)}</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                    <div style={{ fontSize: "0.68rem", color: C.muted, fontWeight: 700 }}>Due date</div>
+                    <div style={{ fontSize: "0.78rem", color: C.brownMid }}>
+                      {selectedRequest.due_date
+                        ? new Date(selectedRequest.due_date).toLocaleDateString()
+                        : "None"}
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                    <div style={{ fontSize: "0.68rem", color: C.muted, fontWeight: 700 }}>Creator</div>
+                    <div style={{ fontSize: "0.78rem", color: C.brownMid }}>{getUserLabel(selectedRequest.created_by, "Unknown")}</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.2rem" }}>
+                    <div style={{ fontSize: "0.68rem", color: C.muted, fontWeight: 700 }}>Assignee</div>
+                    <div style={{ fontSize: "0.78rem", color: C.brownMid }}>{getUserLabel(selectedRequest.assigned_to, "Unassigned")}</div>
+                  </div>
+                </div>
+
+                {!isGardenAdmin && (
+                  <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
+                    {selectedRequest.status === "active" && selectedRequest.assigned_to == null && (
+                      <button
+                        onClick={() => handleClaimRequest(selectedRequest.id)}
+                        disabled={statusChangingId === selectedRequest.id}
+                        style={{
+                          background: C.amber,
+                          color: C.white,
+                          border: "none",
+                          borderRadius: "0.75rem",
+                          padding: "0.75rem",
+                          fontWeight: 800,
+                          cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
+                          fontFamily: "'Nunito', sans-serif",
+                          fontSize: "0.88rem",
+                          opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
+                        }}
+                      >
+                        Claim Task
+                      </button>
+                    )}
+                    {selectedRequest.status === "pending" && selectedRequest.assigned_to === user?.id && (
+                      <>
+                        <button
+                          onClick={() => handleUnclaimRequest(selectedRequest.id)}
+                          disabled={statusChangingId === selectedRequest.id}
+                          style={{
+                            background: C.creamDark,
+                            color: C.brownMid,
+                            border: "none",
+                            borderRadius: "0.75rem",
+                            padding: "0.75rem",
+                            fontWeight: 800,
+                            cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
+                            fontFamily: "'Nunito', sans-serif",
+                            fontSize: "0.88rem",
+                            opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
+                          }}
+                        >
+                          Unclaim Task
+                        </button>
+                        <button
+                          onClick={() => handleCompleteRequest(selectedRequest.id)}
+                          disabled={statusChangingId === selectedRequest.id}
+                          style={{
+                            background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
+                            color: C.white,
+                            border: "none",
+                            borderRadius: "0.75rem",
+                            padding: "0.75rem",
+                            fontWeight: 800,
+                            cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
+                            fontFamily: "'Nunito', sans-serif",
+                            fontSize: "0.88rem",
+                            opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
+                          }}
+                        >
+                          Mark Complete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {isGardenAdmin && (
+                  <div style={{ marginTop: "0.25rem", paddingTop: "0.75rem", borderTop: `0.0625rem solid ${C.border}` }}>
+                    <div style={{ fontSize: "0.69rem", color: C.muted, fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.5rem", ...mono }}>
+                      Admin controls
+                    </div>
+                    <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                      {selectedRequest.status === "active" && selectedRequest.assigned_to == null && (
+                        <button
+                          onClick={() => handleClaimRequest(selectedRequest.id)}
+                          disabled={statusChangingId === selectedRequest.id}
+                          style={{
+                            background: C.amber,
+                            color: C.white,
+                            border: "none",
+                            borderRadius: "0.75rem",
+                            padding: "0.7rem 0.75rem",
+                            fontWeight: 800,
+                            cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
+                            fontFamily: "'Nunito', sans-serif",
+                            fontSize: "0.82rem",
+                            opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
+                          }}
+                        >
+                          Claim Task
+                        </button>
+                      )}
+                      {selectedRequest.status === "pending" && (
+                        <>
+                          <button
+                            onClick={() => handleUnclaimRequest(selectedRequest.id)}
+                            disabled={statusChangingId === selectedRequest.id}
+                            style={{
+                              background: C.creamDark,
+                              color: C.brownMid,
+                              border: "none",
+                              borderRadius: "0.75rem",
+                              padding: "0.7rem 0.75rem",
+                              fontWeight: 800,
+                              cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
+                              fontFamily: "'Nunito', sans-serif",
+                              fontSize: "0.82rem",
+                              opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
+                            }}
+                          >
+                            Unclaim Task
+                          </button>
+                          <button
+                            onClick={() => handleCompleteRequest(selectedRequest.id)}
+                            disabled={statusChangingId === selectedRequest.id}
+                            style={{
+                              background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
+                              color: C.white,
+                              border: "none",
+                              borderRadius: "0.75rem",
+                              padding: "0.7rem 0.75rem",
+                              fontWeight: 800,
+                              cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
+                              fontFamily: "'Nunito', sans-serif",
+                              fontSize: "0.82rem",
+                              opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
+                            }}
+                          >
+                            Mark Complete
+                          </button>
+                        </>
+                      )}
+                      {selectedRequest.status === "done" && (
+                        <div style={{ fontSize: "0.72rem", color: C.muted, lineHeight: 1.5 }}>
+                          Reopen is unavailable here. TODO: add a backend workflow endpoint if completed tasks need to be restored.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {(selectedRequest.created_by === user?.id || isGardenAdmin) && (
+                  <div style={{ display: "flex", marginTop: "0.25rem" }}>
+                    <button
+                      onClick={() => {
+                        if (window.confirm("Delete this help request?")) {
+                          handleDeleteRequest(selectedRequest.id);
+                          setShowCompleteSuccess(false);
+                          setSelectedRequest(null);
+                        }
+                      }}
+                      disabled={deletingId === selectedRequest.id}
+                      style={{ background: C.creamDark, border: "none", borderRadius: "0.75rem",
+                        padding: "0.75rem 0.85rem", fontSize: "0.88rem", fontWeight: 800,
+                        color: C.terra, cursor: "pointer", fontFamily: "'Nunito', sans-serif" }}>
+                      {deletingId === selectedRequest.id ? "..." : "Delete Task"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
