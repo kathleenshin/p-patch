@@ -32,7 +32,7 @@ export function PlotGrid({
       return !plot.isOccupied;
     }
     if (key === "active") {
-      return plot.isOccupied && !plot.isMine;
+      return plot.isOccupied;
     }
     if (key === "mine") {
       return plot.isMine;
