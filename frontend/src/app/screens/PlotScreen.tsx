@@ -2,9 +2,7 @@ import { useState, useEffect, useRef, type FormEvent, type ChangeEvent } from "r
 import {
   ChevronRight,
   Plus,
-  Pencil,
   MapPin,
-  ArrowRight,
   ClipboardList,
   Users,
 } from "lucide-react";
@@ -205,10 +203,8 @@ export function PlotScreen({
 
   const tabs: { key: typeof activeTab; label: string }[] = [
     { key: "overview", label: "Overview" },
-    { key: "notes", label: "Notes" },
     // Gallery disabled: older uploads were view-only with no select/delete actions.
     // { key: "gallery", label: "Gallery" },
-    { key: "history", label: "History" },
   ];
 
   const plotInfo = focusPlot
@@ -233,14 +229,19 @@ export function PlotScreen({
     : [];
 
   const quickActions = [
-    { label: "Add Note", Icon: Plus },
+    {
+      label: "Add Note",
+      Icon: Plus,
+      onClick: () => {
+        setShowNoteForm((prev) => !prev);
+        setNoteSubmitError(null);
+      },
+    },
       {
           label: photoUploading ? "Uploading…" : "Upload Photo",
           Icon: Plus,
           onClick: handleUploadPhotoClick,
       },
-    { label: "View Plot on Map", Icon: MapPin },
-    { label: "Print Plot Summary", Icon: ArrowRight },
   ];
 
   const visibilityLabel = (visibility: string) => {
@@ -455,26 +456,6 @@ export function PlotScreen({
                 </div>
               </div>
 
-              <button
-                style={{
-                  background: C.white,
-                  border: `0.0625rem solid ${C.border}`,
-                  borderRadius: "0.5625rem",
-                  padding: "0.4375rem 1rem",
-                  color: C.brownMid,
-                  fontWeight: 700,
-                  fontSize: "0.78rem",
-                  cursor: "pointer",
-                  fontFamily: "'Nunito', sans-serif",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.375rem",
-                  boxShadow:
-                    "0 0.0625rem 0.25rem rgba(44,31,20,0.08)",
-                }}
-              >
-                <Pencil size={12} /> Edit Plot
-              </button>
             </div>
 
             {/* Hero photo — uploaded image when available, else bundled placeholder */}
