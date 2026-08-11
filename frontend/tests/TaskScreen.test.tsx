@@ -22,6 +22,16 @@ vi.mock("../src/app/hooks/usePlots", () => ({
         garden: 10,
         garden_name: "Garden A",
         plot_number: "1",
+        is_mine: false,
+        is_active: true,
+      },
+      {
+        id: 2,
+        garden: 10,
+        garden_name: "Garden A",
+        plot_number: "2",
+        is_mine: true,
+        is_active: true,
       },
     ],
   }),
@@ -57,14 +67,14 @@ describe("TaskScreen", () => {
       priority: "medium",
       category: "other",
       garden: 10,
-      plot: 1,
+      plot: 2,
       assigned_to: null,
       created_by: 7,
       due_date: null,
     });
   });
 
-  it("creates new help requests without assigned_to from the new-task form", async () => {
+  it("auto-selects the active owned plot and omits assigned_to in new task payload", async () => {
     const user = userEvent.setup();
     render(<TaskScreen />);
 
@@ -79,10 +89,6 @@ describe("TaskScreen", () => {
     await user.type(screen.getByPlaceholderText("Task title"), "Water beds");
     await user.type(screen.getByPlaceholderText("Description..."), "Before noon");
 
-    const selects = screen.getAllByRole("combobox");
-    const plotSelect = selects[selects.length - 1];
-    await user.selectOptions(plotSelect, "1");
-
     await user.click(screen.getByRole("button", { name: "Create Help Request" }));
 
     await waitFor(() => {
@@ -90,12 +96,12 @@ describe("TaskScreen", () => {
     });
 
     const [, payload] = createHelpRequestMock.mock.calls[0];
-    expect(payload).not.toHaveProperty("assigned_to");
+    expect(payload.assigned_to).toBeNull();
     expect(payload).toMatchObject({
       title: "Water beds",
       description: "Before noon",
       garden: 10,
-      plot: 1,
+      plot: 2,
       priority: "medium",
       category: "other",
       due_date: null,
