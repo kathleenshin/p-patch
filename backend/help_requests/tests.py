@@ -9,6 +9,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
 from unittest.mock import patch
+from notifications.services.email_provider import EmailDeliveryError
 
 from plots.models import Garden, GardenMembership, Plot
 
@@ -390,6 +391,75 @@ class HelpRequestAPITests(APITestCase):
             help_request.status,
             HelpRequest.Status.PENDING,
         )
+
+    @patch("help_requests.views.notify_help_request_claimed")
+    def test_claim_sends_claim_notification(self, mock_notify_claimed):
+        creator = User.objects.create_user(
+            email="creator@example.com",
+            password="password",
+            is_approved=True,
+        )
+
+        help_request = HelpRequest.objects.create(
+            title="Mulch paths",
+            description="Need help with pathways.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=creator,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-claim",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        mock_notify_claimed.assert_called_once()
+        notified_request = mock_notify_claimed.call_args.args[0]
+        self.assertEqual(notified_request.id, help_request.id)
+
+    @patch(
+        "help_requests.views.notify_help_request_claimed",
+        side_effect=EmailDeliveryError("SES outage"),
+    )
+    def test_claim_succeeds_when_claim_notification_fails(
+        self,
+        _mock_notify_claimed,
+    ):
+        creator = User.objects.create_user(
+            email="creator2@example.com",
+            password="password",
+            is_approved=True,
+        )
+
+        help_request = HelpRequest.objects.create(
+            title="Fix irrigation",
+            description="Valve needs attention.",
+            garden=self.garden,
+            created_by=creator,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-claim",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        help_request.refresh_from_db()
+        self.assertEqual(help_request.assigned_to, self.user)
+        self.assertEqual(help_request.status, HelpRequest.Status.PENDING)
 
     def test_user_cannot_claim_already_claimed_help_request(self):
         other_user = User.objects.create_user(

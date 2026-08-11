@@ -54,6 +54,7 @@ export function TaskScreen() {
   const [dueDate, setDueDate] = useState("");
   const [requests, setRequests] = useState<HelpRequest[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [statusChangingId, setStatusChangingId] = useState<number | null>(null);
@@ -64,9 +65,6 @@ export function TaskScreen() {
   const [editPriority, setEditPriority] = useState("medium");
   const [editCategory, setEditCategory] = useState("other");
   const [editDueDate, setEditDueDate] = useState("");
-  const [assignee, setAssignee] = useState<number | "">("" );
-  const [editAssignee, setEditAssignee] = useState<number | "">("" );
-  const [plotSelection, setPlotSelection] = useState("");
   const [editPlotSelection, setEditPlotSelection] = useState("");
   const [users, setUsers] = useState<UserOption[]>([]);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
@@ -135,7 +133,7 @@ export function TaskScreen() {
     }
 
     const plot = plots.find((item) => item.id === plotId);
-    return plot ? `Plot #${plot.plot_number}` : `Plot #${plotId}`;
+    return plot ? `Plot #${plot.plot_number}` : "Plot (number unavailable)";
   };
 
   const plotOptions = [...plots]
@@ -165,30 +163,32 @@ export function TaskScreen() {
 
   const handleCreateRequest = async () => {
     if (!accessToken) {
-      setError("Please log in to create help requests.");
+      setCreateError("Please log in to create help requests.");
       return;
     }
 
     setIsSubmitting(true);
-    setError(null);
+    setCreateError(null);
     setSuccess(null);
 
     try {
-      const selectedPlot = getSelectedPlotOption(plotSelection);
-      if (!selectedPlot) {
-        setError("Select a plot to create a help request.");
+      const activeUserPlot = plots.find(
+        (plot) => plot.is_mine && plot.is_active
+      );
+      if (!activeUserPlot) {
+        setCreateError("No active plot is associated with your account.");
         return;
       }
 
       const data = await createHelpRequest(accessToken, {
         title,
         description,
-        garden: selectedPlot.gardenId,
-        plot: Number(selectedPlot.value),
+        garden: activeUserPlot.garden,
+        plot: activeUserPlot.id,
         priority,
         category,
         due_date: dueDate || null,
-        assigned_to: assignee || null,
+        assigned_to: null,
       });
 
       setRequests((current) => [data, ...current]);
@@ -198,12 +198,11 @@ export function TaskScreen() {
       setPriority("medium");
       setCategory("other");
       setDueDate("");
-      setAssignee("");
-      setPlotSelection("");
+      setCreateError(null);
       setShowNew(false);
       setSuccess("Help request created.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create the help request.");
+      setCreateError(err instanceof Error ? err.message : "Unable to create the help request.");
     } finally {
       setIsSubmitting(false);
     }
@@ -337,7 +336,6 @@ export function TaskScreen() {
     setEditPriority(request.priority);
     setEditCategory(request.category);
     setEditDueDate(request.due_date ?? "");
-    setEditAssignee(request.assigned_to ?? "");
     setEditPlotSelection(request.plot ? String(request.plot) : "");
     setError(null);
     setSuccess(null);
@@ -375,7 +373,6 @@ export function TaskScreen() {
         priority: editPriority,
         category: editCategory,
         due_date: editDueDate || null,
-        assigned_to: editAssignee || null,
       };
 
       if (plotSelectionChanged) {
@@ -528,7 +525,10 @@ export function TaskScreen() {
         </div>
       </div>
 
-      <button onClick={() => setShowNew(true)}
+      <button onClick={() => {
+        setCreateError(null);
+        setShowNew(true);
+      }}
         style={{ position: "fixed", bottom: "4vw", right: "4vw", width: "3.125rem", height: "3.125rem",
           borderRadius: "50%", background: `linear-gradient(135deg, ${C.terra}, ${C.terraDark})`,
           color: C.white, border: "none", cursor: "pointer",
@@ -686,23 +686,6 @@ export function TaskScreen() {
                 />
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Assign to</label>
-                <select
-                  value={editAssignee}
-                  onChange={(event) => setEditAssignee(event.target.value === "" ? "" : Number(event.target.value))}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}>
-                  <option value="">Unassigned</option>
-                  {users.map((user) => {
-                    const displayName = [user.first_name, user.last_name].filter(Boolean).join(" ");
-                    return (
-                      <option key={user.id} value={user.id}>
-                        {displayName || user.email}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
                 <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Plot number (optional)</label>
                 <select
                   value={editPlotSelection}
@@ -762,13 +745,23 @@ export function TaskScreen() {
             <div style={{ display: "flex", flexDirection: "column", gap: "0.6875rem" }}>
               <input
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  if (createError) {
+                    setCreateError(null);
+                  }
+                }}
                 placeholder="Task title"
                 style={{ ...inputStyle, fontSize: "0.84rem" }}
               />
               <textarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  if (createError) {
+                    setCreateError(null);
+                  }
+                }}
                 placeholder="Description..."
                 style={{ ...inputStyle, minHeight: "4.75rem",
                   resize: "vertical", fontSize: "0.84rem",
@@ -778,7 +771,12 @@ export function TaskScreen() {
                 <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Priority</label>
                 <select
                   value={priority}
-                  onChange={(event) => setPriority(event.target.value)}
+                  onChange={(event) => {
+                    setPriority(event.target.value);
+                    if (createError) {
+                      setCreateError(null);
+                    }
+                  }}
                   style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}>
                   {priorityOptions.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -792,7 +790,12 @@ export function TaskScreen() {
                 <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Request type</label>
                 <select
                   value={category}
-                  onChange={(event) => setCategory(event.target.value)}
+                  onChange={(event) => {
+                    setCategory(event.target.value);
+                    if (createError) {
+                      setCreateError(null);
+                    }
+                  }}
                   style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}>
                   {categoryOptions.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -804,42 +807,18 @@ export function TaskScreen() {
                 <input
                   type="date"
                   value={dueDate}
-                  onChange={(event) => setDueDate(event.target.value)}
+                  onChange={(event) => {
+                    setDueDate(event.target.value);
+                    if (createError) {
+                      setCreateError(null);
+                    }
+                  }}
                   style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
                 />
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Assign to</label>
-                <select
-                  value={assignee}
-                  onChange={(event) => setAssignee(event.target.value === "" ? "" : Number(event.target.value))}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}>
-                  <option value="">Unassigned</option>
-                  {users.map((user) => {
-                    const displayName = [user.first_name, user.last_name].filter(Boolean).join(" ");
-                    return (
-                      <option key={user.id} value={user.id}>
-                        {displayName || user.email}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Plot number (optional)</label>
-                <select
-                  value={plotSelection}
-                  onChange={(event) => setPlotSelection(event.target.value)}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
-                >
-                  <option value="">No plot</option>
-                  {plotOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {createError && (
+                <div style={{ color: C.terra, fontWeight: 700, fontSize: "0.8rem" }}>{createError}</div>
+              )}
               <button onClick={handleCreateRequest} disabled={isSubmitting}
                 style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
                   color: C.white, border: "none", borderRadius: "0.75rem", padding: "0.75rem",

@@ -14,6 +14,7 @@ from notifications.services.recipients import (
     get_active_garden_member_emails,
 )
 from notifications.services.task_notifications import (
+    notify_help_request_claimed,
     notify_new_help_request,
     notify_urgent_help_request,
 )
@@ -126,6 +127,14 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
                     "assigned_to",
                     "status",
                 ]
+            )
+
+        try:
+            notify_help_request_claimed(help_request)
+        except EmailDeliveryError:
+            logger.exception(
+                "Failed to send claim notification for help request %s",
+                help_request.pk,
             )
 
         return Response(
