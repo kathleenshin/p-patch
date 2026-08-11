@@ -4,18 +4,23 @@ import { C, serif, sans, mono, inputStyle } from "../theme";
 import { useAuth } from "../auth/AuthContext";
 import { invalidatePlotsCache, usePlots } from "../hooks/usePlots";
 import taskIcon from "../../imports/TaskPageIcon.jpg";
+
 import {
+  claimHelpRequest,
+  completeHelpRequest,
   createHelpRequest,
   deleteHelpRequest,
   fetchHelpRequests,
   fetchUsers,
+  unclaimHelpRequest,
   updateHelpRequest,
   type HelpRequest,
   type UserOption,
 } from "../../lib/helpRequestsApi";
 
+
 interface Task { id: number | string; title: string; desc: string; assignee: string; aColor: string; date: string; priority?: string; }
-interface Column { id: string; label: string; count: number; accent: string; tasks: Task[]; }
+interface Column { id: string; label: string; accent: string; tasks: Task[]; }
 
 const priorityOptions = [
   { value: "low", label: "Low" },
@@ -32,13 +37,13 @@ const categoryOptions = [
 ] as const;
 
 const initialColumns: Column[] = [
-  { id: "active", label: "Active", count: 0, accent: C.terra, tasks: [] },
-  { id: "pending", label: "Pending", count: 0, accent: C.amber, tasks: [] },
-  { id: "done", label: "Done", count: 0, accent: C.sage, tasks: [] },
+  { id: "active", label: "Active", accent: C.terra, tasks: [] },
+  { id: "pending", label: "Claimed", accent: C.amber, tasks: [] },
+  { id: "done", label: "Done", accent: C.sage, tasks: [] },
 ];
 
 export function TaskScreen() {
-  const { accessToken } = useAuth();
+  const { accessToken, isGardenAdmin, user } = useAuth();
   const { plots } = usePlots();
   const [columns] = useState(initialColumns);
   const [showNew, setShowNew] = useState(false);
@@ -49,6 +54,7 @@ export function TaskScreen() {
   const [dueDate, setDueDate] = useState("");
   const [requests, setRequests] = useState<HelpRequest[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [statusChangingId, setStatusChangingId] = useState<number | null>(null);
@@ -56,13 +62,9 @@ export function TaskScreen() {
   const [selectedRequest, setSelectedRequest] = useState<HelpRequest | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDescription, setEditDescription] = useState("");
-  const [editStatus, setEditStatus] = useState("active");
   const [editPriority, setEditPriority] = useState("medium");
   const [editCategory, setEditCategory] = useState("other");
   const [editDueDate, setEditDueDate] = useState("");
-  const [assignee, setAssignee] = useState<number | "">("" );
-  const [editAssignee, setEditAssignee] = useState<number | "">("" );
-  const [plotSelection, setPlotSelection] = useState("");
   const [editPlotSelection, setEditPlotSelection] = useState("");
   const [users, setUsers] = useState<UserOption[]>([]);
   const [isSavingDetails, setIsSavingDetails] = useState(false);
@@ -76,6 +78,11 @@ export function TaskScreen() {
     active: C.terra,
     pending: C.amber,
     done: C.sage,
+  };
+  const statusLabel: Record<string, string> = {
+    active: "Active",
+    pending: "Claimed",
+    done: "Done",
   };
 
   const loadRequests = async () => {
@@ -126,7 +133,7 @@ export function TaskScreen() {
     }
 
     const plot = plots.find((item) => item.id === plotId);
-    return plot ? `Plot #${plot.plot_number}` : `Plot #${plotId}`;
+    return plot ? `Plot #${plot.plot_number}` : "Plot (number unavailable)";
   };
 
   const plotOptions = [...plots]
@@ -156,30 +163,32 @@ export function TaskScreen() {
 
   const handleCreateRequest = async () => {
     if (!accessToken) {
-      setError("Please log in to create help requests.");
+      setCreateError("Please log in to create help requests.");
       return;
     }
 
     setIsSubmitting(true);
-    setError(null);
+    setCreateError(null);
     setSuccess(null);
 
     try {
-      const selectedPlot = getSelectedPlotOption(plotSelection);
-      if (!selectedPlot) {
-        setError("Select a plot to create a help request.");
+      const activeUserPlot = plots.find(
+        (plot) => plot.is_mine && plot.is_active
+      );
+      if (!activeUserPlot) {
+        setCreateError("No active plot is associated with your account.");
         return;
       }
 
       const data = await createHelpRequest(accessToken, {
         title,
         description,
-        garden: selectedPlot.gardenId,
-        plot: Number(selectedPlot.value),
+        garden: activeUserPlot.garden,
+        plot: activeUserPlot.id,
         priority,
         category,
         due_date: dueDate || null,
-        assigned_to: assignee || null,
+        assigned_to: null,
       });
 
       setRequests((current) => [data, ...current]);
@@ -189,20 +198,19 @@ export function TaskScreen() {
       setPriority("medium");
       setCategory("other");
       setDueDate("");
-      setAssignee("");
-      setPlotSelection("");
+      setCreateError(null);
       setShowNew(false);
       setSuccess("Help request created.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to create the help request.");
+      setCreateError(err instanceof Error ? err.message : "Unable to create the help request.");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleStatusChange = async (requestId: number, nextStatus: string) => {
+  const handleClaimRequest = async (requestId: number) => {
     if (!accessToken) {
-      setError("Please log in to update help requests.");
+      setError("Please log in to claim help requests.");
       return;
     }
 
@@ -211,12 +219,89 @@ export function TaskScreen() {
     setSuccess(null);
 
     try {
-      const data = await updateHelpRequest(accessToken, requestId, { status: nextStatus });
-      setRequests((current) => current.map((request) => (request.id === requestId ? data : request)));
+      const data = await claimHelpRequest(accessToken, requestId);
+
+      setRequests((current) =>
+        current.map((request) =>
+          request.id === requestId ? data : request
+        )
+      );
+
+      setSelectedRequest(data);
       invalidatePlotsCache();
-      setSuccess("Help request updated.");
+      setSuccess("Help request claimed.");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to update the help request.");
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to claim the help request."
+      );
+    } finally {
+      setStatusChangingId(null);
+    }
+  };
+
+  const handleUnclaimRequest = async (requestId: number) => {
+    if (!accessToken) {
+      setError("Please log in to unclaim help requests.");
+      return;
+    }
+
+    setStatusChangingId(requestId);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const data = await unclaimHelpRequest(accessToken, requestId);
+
+      setRequests((current) =>
+        current.map((request) =>
+          request.id === requestId ? data : request
+        )
+      );
+
+      setSelectedRequest(data);
+      invalidatePlotsCache();
+      setSuccess("Help request unclaimed.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to unclaim the help request."
+      );
+    } finally {
+      setStatusChangingId(null);
+    }
+  };
+
+  const handleCompleteRequest = async (requestId: number) => {
+    if (!accessToken) {
+      setError("Please log in to complete help requests.");
+      return;
+    }
+
+    setStatusChangingId(requestId);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const data = await completeHelpRequest(accessToken, requestId);
+
+      setRequests((current) =>
+        current.map((request) =>
+          request.id === requestId ? data : request
+        )
+      );
+
+      setSelectedRequest(data);
+      invalidatePlotsCache();
+      setSuccess("Help request completed.");
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to complete the help request."
+      );
     } finally {
       setStatusChangingId(null);
     }
@@ -248,11 +333,9 @@ export function TaskScreen() {
     setSelectedRequest(request);
     setEditTitle(request.title);
     setEditDescription(request.description);
-    setEditStatus(request.status);
     setEditPriority(request.priority);
     setEditCategory(request.category);
     setEditDueDate(request.due_date ?? "");
-    setEditAssignee(request.assigned_to ?? "");
     setEditPlotSelection(request.plot ? String(request.plot) : "");
     setError(null);
     setSuccess(null);
@@ -284,14 +367,12 @@ export function TaskScreen() {
         return;
       }
 
-      const payload: Partial<HelpRequest> & { status?: string } = {
+      const payload: Partial<HelpRequest> = {
         title: editTitle,
         description: editDescription,
-        status: editStatus,
         priority: editPriority,
         category: editCategory,
         due_date: editDueDate || null,
-        assigned_to: editAssignee || null,
       };
 
       if (plotSelectionChanged) {
@@ -348,7 +429,9 @@ export function TaskScreen() {
                 <span style={{ fontSize: "0.7rem", fontWeight: 800, color: col.accent,
                   textTransform: "uppercase", letterSpacing: "0.08em", ...mono }}>{col.label}</span>
                 <span style={{ background: col.accent, color: C.white, borderRadius: "1.25rem",
-                  padding: "0.125rem 0.5rem", fontSize: "0.66rem", fontWeight: 800 }}>{col.count}</span>
+                  padding: "0.125rem 0.5rem", fontSize: "0.66rem", fontWeight: 800 }}>
+                  {requests.filter((request) => request.status === requestColumnMap[col.id]).length}
+                </span>
               </div>
               <div style={{ background: colBg[col.id], borderRadius: "1rem", padding: "0.625rem",
                 minHeight: "7.5rem", display: "flex", flexDirection: "column", gap: "0.5625rem",
@@ -442,7 +525,10 @@ export function TaskScreen() {
         </div>
       </div>
 
-      <button onClick={() => setShowNew(true)}
+      <button onClick={() => {
+        setCreateError(null);
+        setShowNew(true);
+      }}
         style={{ position: "fixed", bottom: "4vw", right: "4vw", width: "3.125rem", height: "3.125rem",
           borderRadius: "50%", background: `linear-gradient(135deg, ${C.terra}, ${C.terraDark})`,
           color: C.white, border: "none", cursor: "pointer",
@@ -487,15 +573,86 @@ export function TaskScreen() {
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
                 <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Status</label>
-                <select
-                  value={editStatus}
-                  onChange={(event) => setEditStatus(event.target.value)}
-                  disabled={statusChangingId === selectedRequest.id}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem", flex: 1, minWidth: "8rem" }}>
-                  <option value="active">Active</option>
-                  <option value="pending">Pending</option>
-                  <option value="done">Done</option>
-                </select>
+                <div
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    width: "fit-content",
+                    padding: "0.4rem 0.65rem",
+                    borderRadius: "999px",
+                    background: `${statusColor[selectedRequest.status] ?? C.border}22`,
+                    color: statusColor[selectedRequest.status] ?? C.brownMid,
+                    fontSize: "0.75rem",
+                    fontWeight: 800,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                    ...mono,
+                  }}
+                >
+                  {statusLabel[selectedRequest.status] ?? selectedRequest.status}
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                {selectedRequest.status === "active" && selectedRequest.assigned_to == null && (
+                  <button
+                    onClick={() => handleClaimRequest(selectedRequest.id)}
+                    disabled={statusChangingId === selectedRequest.id}
+                    style={{
+                      background: C.amber,
+                      color: C.white,
+                      border: "none",
+                      borderRadius: "0.75rem",
+                      padding: "0.75rem",
+                      fontWeight: 800,
+                      cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
+                      fontFamily: "'Nunito', sans-serif",
+                      fontSize: "0.88rem",
+                      opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
+                    }}
+                  >
+                    Claim Task
+                  </button>
+                )}
+                {selectedRequest.status === "pending" && (isGardenAdmin || selectedRequest.assigned_to === user?.id) && (
+                  <>
+                    <button
+                      onClick={() => handleUnclaimRequest(selectedRequest.id)}
+                      disabled={statusChangingId === selectedRequest.id}
+                      style={{
+                        background: C.creamDark,
+                        color: C.brownMid,
+                        border: "none",
+                        borderRadius: "0.75rem",
+                        padding: "0.75rem",
+                        fontWeight: 800,
+                        cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
+                        fontFamily: "'Nunito', sans-serif",
+                        fontSize: "0.88rem",
+                        opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
+                      }}
+                    >
+                      Unclaim Task
+                    </button>
+                    <button
+                      onClick={() => handleCompleteRequest(selectedRequest.id)}
+                      disabled={statusChangingId === selectedRequest.id}
+                      style={{
+                        background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
+                        color: C.white,
+                        border: "none",
+                        borderRadius: "0.75rem",
+                        padding: "0.75rem",
+                        fontWeight: 800,
+                        cursor: statusChangingId === selectedRequest.id ? "wait" : "pointer",
+                        fontFamily: "'Nunito', sans-serif",
+                        fontSize: "0.88rem",
+                        opacity: statusChangingId === selectedRequest.id ? 0.75 : 1,
+                      }}
+                    >
+                      Mark Complete
+                    </button>
+                  </>
+                )}
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
                 <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Priority</label>
@@ -527,23 +684,6 @@ export function TaskScreen() {
                   onChange={(event) => setEditDueDate(event.target.value)}
                   style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
                 />
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Assign to</label>
-                <select
-                  value={editAssignee}
-                  onChange={(event) => setEditAssignee(event.target.value === "" ? "" : Number(event.target.value))}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}>
-                  <option value="">Unassigned</option>
-                  {users.map((user) => {
-                    const displayName = [user.first_name, user.last_name].filter(Boolean).join(" ");
-                    return (
-                      <option key={user.id} value={user.id}>
-                        {displayName || user.email}
-                      </option>
-                    );
-                  })}
-                </select>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
                 <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Plot number (optional)</label>
@@ -605,13 +745,23 @@ export function TaskScreen() {
             <div style={{ display: "flex", flexDirection: "column", gap: "0.6875rem" }}>
               <input
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => {
+                  setTitle(e.target.value);
+                  if (createError) {
+                    setCreateError(null);
+                  }
+                }}
                 placeholder="Task title"
                 style={{ ...inputStyle, fontSize: "0.84rem" }}
               />
               <textarea
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => {
+                  setDescription(e.target.value);
+                  if (createError) {
+                    setCreateError(null);
+                  }
+                }}
                 placeholder="Description..."
                 style={{ ...inputStyle, minHeight: "4.75rem",
                   resize: "vertical", fontSize: "0.84rem",
@@ -621,7 +771,12 @@ export function TaskScreen() {
                 <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Priority</label>
                 <select
                   value={priority}
-                  onChange={(event) => setPriority(event.target.value)}
+                  onChange={(event) => {
+                    setPriority(event.target.value);
+                    if (createError) {
+                      setCreateError(null);
+                    }
+                  }}
                   style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}>
                   {priorityOptions.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -635,7 +790,12 @@ export function TaskScreen() {
                 <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Request type</label>
                 <select
                   value={category}
-                  onChange={(event) => setCategory(event.target.value)}
+                  onChange={(event) => {
+                    setCategory(event.target.value);
+                    if (createError) {
+                      setCreateError(null);
+                    }
+                  }}
                   style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}>
                   {categoryOptions.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -647,42 +807,18 @@ export function TaskScreen() {
                 <input
                   type="date"
                   value={dueDate}
-                  onChange={(event) => setDueDate(event.target.value)}
+                  onChange={(event) => {
+                    setDueDate(event.target.value);
+                    if (createError) {
+                      setCreateError(null);
+                    }
+                  }}
                   style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
                 />
               </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Assign to</label>
-                <select
-                  value={assignee}
-                  onChange={(event) => setAssignee(event.target.value === "" ? "" : Number(event.target.value))}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}>
-                  <option value="">Unassigned</option>
-                  {users.map((user) => {
-                    const displayName = [user.first_name, user.last_name].filter(Boolean).join(" ");
-                    return (
-                      <option key={user.id} value={user.id}>
-                        {displayName || user.email}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-              <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
-                <label style={{ fontSize: "0.75rem", color: C.muted, fontWeight: 700 }}>Plot number (optional)</label>
-                <select
-                  value={plotSelection}
-                  onChange={(event) => setPlotSelection(event.target.value)}
-                  style={{ ...inputStyle, fontSize: "0.84rem", padding: "0.7rem 0.8rem" }}
-                >
-                  <option value="">No plot</option>
-                  {plotOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
+              {createError && (
+                <div style={{ color: C.terra, fontWeight: 700, fontSize: "0.8rem" }}>{createError}</div>
+              )}
               <button onClick={handleCreateRequest} disabled={isSubmitting}
                 style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`,
                   color: C.white, border: "none", borderRadius: "0.75rem", padding: "0.75rem",

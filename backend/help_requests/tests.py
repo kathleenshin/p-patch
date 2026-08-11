@@ -8,7 +8,7 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 from rest_framework_simplejwt.tokens import RefreshToken
-from unittest.mock import patch
+from notifications.services.email_provider import EmailDeliveryError
 
 from plots.models import Garden, GardenMembership, Plot
 
@@ -210,11 +210,13 @@ class HelpRequestAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["plot"], other_plot.id)
 
+    @patch("help_requests.views.notify_urgent_help_request")
     @patch("help_requests.views.notify_new_help_request")
-    def test_create_notifies_garden_members(self, mock_notify):
-        """Phase 1: posting a help request emails active garden members."""
-        mock_notify.return_value = 2
-
+    def test_create_medium_priority_does_not_send_immediate_email(
+        self,
+        mock_notify_new,
+        mock_notify_urgent,
+    ):
         response = self.client.post(
             reverse("help-request-list"),
             {
@@ -228,11 +230,13 @@ class HelpRequestAPITests(APITestCase):
             format="json",
         )
 
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        mock_notify.assert_called_once()
-        notified = mock_notify.call_args.args[0]
-        self.assertEqual(notified.title, "Mulch paths")
-        self.assertEqual(notified.garden_id, self.garden.id)
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_201_CREATED,
+        )
+
+        mock_notify_new.assert_not_called()
+        mock_notify_urgent.assert_not_called()
 
     def test_help_requests_require_authentication(self):
         help_request = HelpRequest.objects.create(
@@ -390,6 +394,75 @@ class HelpRequestAPITests(APITestCase):
             help_request.status,
             HelpRequest.Status.PENDING,
         )
+
+    @patch("help_requests.views.notify_help_request_claimed")
+    def test_claim_sends_claim_notification(self, mock_notify_claimed):
+        creator = User.objects.create_user(
+            email="creator@example.com",
+            password="password",
+            is_approved=True,
+        )
+
+        help_request = HelpRequest.objects.create(
+            title="Mulch paths",
+            description="Need help with pathways.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=creator,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-claim",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        mock_notify_claimed.assert_called_once()
+        notified_request = mock_notify_claimed.call_args.args[0]
+        self.assertEqual(notified_request.id, help_request.id)
+
+    @patch(
+        "help_requests.views.notify_help_request_claimed",
+        side_effect=EmailDeliveryError("SES outage"),
+    )
+    def test_claim_succeeds_when_claim_notification_fails(
+        self,
+        _mock_notify_claimed,
+    ):
+        creator = User.objects.create_user(
+            email="creator2@example.com",
+            password="password",
+            is_approved=True,
+        )
+
+        help_request = HelpRequest.objects.create(
+            title="Fix irrigation",
+            description="Valve needs attention.",
+            garden=self.garden,
+            created_by=creator,
+        )
+
+        response = self.client.post(
+            reverse(
+                "help-request-claim",
+                kwargs={"pk": help_request.id},
+            )
+        )
+
+        self.assertEqual(
+            response.status_code,
+            status.HTTP_200_OK,
+        )
+
+        help_request.refresh_from_db()
+        self.assertEqual(help_request.assigned_to, self.user)
+        self.assertEqual(help_request.status, HelpRequest.Status.PENDING)
 
     def test_user_cannot_claim_already_claimed_help_request(self):
         other_user = User.objects.create_user(
@@ -960,64 +1033,3 @@ class HelpRequestModelTests(TestCase):
             str(self.help_request),
             "Repair fence",
         )
-
-
-# Mock the notification so tests don't send real emails
-@patch("help_requests.views.notify_urgent_help_request")
-def test_high_priority_help_request_sends_notification(self, mock_notify):
-    self.client.force_authenticate(user=self.user)
-
-    response = self.client.post(
-        reverse("help-request-list"),
-        {
-            "title": "Urgent watering",
-            "description": "Plants need water immediately.",
-            "garden": self.garden.id,
-            "priority": HelpRequest.Priority.HIGH,
-            "category": HelpRequest.Category.WATERING,
-        },
-        format="json",
-    )
-
-    self.assertEqual(
-        response.status_code,
-        status.HTTP_201_CREATED,
-    )
-
-    help_request = HelpRequest.objects.get(
-        id=response.data["id"],
-    )
-
-    mock_notify.assert_called_once_with(help_request)
-
-    self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-
-    help_request = HelpRequest.objects.get(id=response.data["id"])
-    mock_notify.assert_called_once_with(help_request)
-
-
-@patch("help_requests.views.notify_urgent_help_request")
-def test_medium_priority_help_request_does_not_send_notification(
-    self,
-    mock_notify,
-):
-    self.client.force_authenticate(user=self.user)
-
-    response = self.client.post(
-        reverse("help-request-list"),
-        {
-            "title": "Weeding help",
-            "description": "Need help weeding this week.",
-            "garden": self.garden.id,
-            "priority": HelpRequest.Priority.MEDIUM,
-            "category": HelpRequest.Category.GARDENING,
-        },
-        format="json",
-    )
-
-    self.assertEqual(
-        response.status_code,
-        status.HTTP_201_CREATED,
-    )
-
-    mock_notify.assert_not_called()
