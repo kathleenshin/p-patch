@@ -43,6 +43,24 @@ export async function fetchPlots(
   });
 }
 
+/**
+ * Garden-admin: assign an approved member as primary steward of an unassigned plot.
+ * POST /api/plots/<id>/assign/ with { user_id }.
+ * Creates PlotOwnership (is_primary=True); user↔plot lives on that join table
+ * (not a column on User). Response is the updated PlotRecord.
+ */
+export async function assignPlotSteward(
+  plotId: number,
+  userId: number,
+  token: string,
+): Promise<PlotRecord> {
+  return apiFetch<PlotRecord>(`/api/plots/${plotId}/assign/`, {
+    method: "POST",
+    token,
+    body: { user_id: userId },
+  });
+}
+
 /** List photos for one plot (newest first from the API). */
 export async function fetchPlotPhotos(
   plotId: number,
