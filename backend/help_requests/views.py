@@ -61,6 +61,7 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
         ) | Q(
             status=HelpRequest.Status.DONE,
             completed_at__isnull=True,
+            created_at__gte=completed_cutoff,
         )
 
         recent_unclaimed_requests = Q(
