@@ -46,16 +46,27 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
     permission_classes = [IsApproved]
 
     def get_queryset(self):
-        # Keep claimed tasks; only show unclaimed ones from the last 14 days.
-        cutoff = timezone.now() - timedelta(days=14)
+        # Keep claimed in-progress tasks, keep completed tasks for 7 days,
+        # and only show unclaimed ones from the last 14 days.
+        unclaimed_cutoff = timezone.now() - timedelta(days=14)
+        completed_cutoff = timezone.now() - timedelta(days=7)
 
-        claimed_requests = Q(
+        claimed_in_progress_requests = Q(
             assigned_to__isnull=False,
+        ) & ~Q(status=HelpRequest.Status.DONE)
+
+        recent_completed_requests = Q(
+            status=HelpRequest.Status.DONE,
+            completed_at__gte=completed_cutoff,
+        ) | Q(
+            status=HelpRequest.Status.DONE,
+            completed_at__isnull=True,
+            created_at__gte=completed_cutoff,
         )
 
         recent_unclaimed_requests = Q(
             assigned_to__isnull=True,
-            created_at__gte=cutoff,
+            created_at__gte=unclaimed_cutoff,
         )
 
         return (
@@ -66,7 +77,8 @@ class HelpRequestViewSet(viewsets.ModelViewSet):
                 "assigned_to",
             )
             .filter(
-                claimed_requests
+                claimed_in_progress_requests
+                | recent_completed_requests
                 | recent_unclaimed_requests
             )
         )

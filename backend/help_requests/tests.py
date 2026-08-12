@@ -116,6 +116,78 @@ class HelpRequestAPITests(APITestCase):
 
         self.assertNotIn(help_request.id, returned_ids)
 
+    def test_recent_completed_help_request_is_included_in_list(self):
+        help_request = HelpRequest.objects.create(
+            title="Recently completed task",
+            description="Finished recently.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+            assigned_to=self.user,
+            status=HelpRequest.Status.DONE,
+            completed_at=timezone.now() - datetime.timedelta(days=3),
+        )
+
+        response = self.client.get(reverse("help-request-list"))
+        returned_ids = [row["id"] for row in response.data]
+
+        self.assertIn(help_request.id, returned_ids)
+
+    def test_old_completed_help_request_is_excluded_from_list(self):
+        help_request = HelpRequest.objects.create(
+            title="Old completed task",
+            description="Finished long ago.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+            assigned_to=self.user,
+            status=HelpRequest.Status.DONE,
+            completed_at=timezone.now() - datetime.timedelta(days=8),
+        )
+
+        response = self.client.get(reverse("help-request-list"))
+        returned_ids = [row["id"] for row in response.data]
+
+        self.assertNotIn(help_request.id, returned_ids)
+
+    def test_completed_without_completed_at_uses_recent_created_at_fallback(self):
+        help_request = HelpRequest.objects.create(
+            title="Legacy completed task",
+            description="Missing completed timestamp but recently created.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+            assigned_to=self.user,
+            status=HelpRequest.Status.DONE,
+            completed_at=None,
+        )
+
+        response = self.client.get(reverse("help-request-list"))
+        returned_ids = [row["id"] for row in response.data]
+
+        self.assertIn(help_request.id, returned_ids)
+
+    def test_completed_without_completed_at_and_old_created_at_is_excluded(self):
+        help_request = HelpRequest.objects.create(
+            title="Old legacy completed task",
+            description="Missing completed timestamp and created long ago.",
+            garden=self.garden,
+            plot=self.plot,
+            created_by=self.user,
+            assigned_to=self.user,
+            status=HelpRequest.Status.DONE,
+            completed_at=None,
+        )
+
+        HelpRequest.objects.filter(pk=help_request.pk).update(
+            created_at=timezone.now() - datetime.timedelta(days=8)
+        )
+
+        response = self.client.get(reverse("help-request-list"))
+        returned_ids = [row["id"] for row in response.data]
+
+        self.assertNotIn(help_request.id, returned_ids)
+
     def test_create_help_request(self):
         response = self.client.post(
             reverse("help-request-list"),
