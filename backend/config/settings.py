@@ -307,7 +307,4 @@ FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").strip().rstrip
 
 # Temporary deployment fallback: when the public Open-Meteo endpoint rate-limits
 # requests from Render, enable deterministic mock weather with no external calls.
-USE_MOCK_WEATHER = os.getenv(
-    "USE_MOCK_WEATHER",
-    "True" if not DEBUG else "False",
-).lower() == "true"
+USE_MOCK_WEATHER = os.getenv("USE_MOCK_WEATHER", "False").lower() == "true"
