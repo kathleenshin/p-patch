@@ -113,8 +113,16 @@ export function DashboardScreen({
     setSelectedForecastDate(null);
   }, [weatherGardenId]);
 
+  // Keep dashboard arrangement stable by natural plot number order.
+  const sortedPlots = [...plots].sort((a, b) =>
+    a.plot_number.localeCompare(b.plot_number, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    }),
+  );
+
   // Map API plots → PlotGrid rows. Explicit PlotState so TS accepts help-* literals.
-  const plotData: PlotInfo[] = plots.map((plot: PlotRecord) => {
+  const plotData: PlotInfo[] = sortedPlots.map((plot: PlotRecord) => {
     const primaryOwner =
       plot.owners.find((owner) => owner.is_primary) ?? plot.owners[0];
     const helpStatus = plot.help_status;
