@@ -641,7 +641,8 @@ export function AdminScreen({ setScreen: _setScreen }: { setScreen: (s: Screen) 
   }
 
   // Unassigned Plots panel + popup rows (Assign opens steward picker above list modal).
-  function renderUnassignedPlotsList() {
+  // Panel passes limit: 5; View-all modal omits limit to show the full list.
+  function renderUnassignedPlotsList(options?: { limit?: number }) {
     if (plotsLoading) {
       return (
         <div style={{ padding: "1rem", fontSize: "0.8rem", color: C.muted }}>
@@ -663,7 +664,11 @@ export function AdminScreen({ setScreen: _setScreen }: { setScreen: (s: Screen) 
         </div>
       );
     }
-    return unassignedPlots.map((p, i) => (
+    const plotsToShow =
+      options?.limit != null
+        ? unassignedPlots.slice(0, options.limit)
+        : unassignedPlots;
+    return plotsToShow.map((p, i) => (
       <div
         key={p.id}
         style={{
@@ -672,7 +677,7 @@ export function AdminScreen({ setScreen: _setScreen }: { setScreen: (s: Screen) 
           gap: "0.625rem",
           padding: "0.6875rem 1rem",
           borderBottom:
-            i < unassignedPlots.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
+            i < plotsToShow.length - 1 ? `0.0625rem solid ${C.creamDark}` : "none",
         }}
       >
         <div
@@ -963,7 +968,7 @@ export function AdminScreen({ setScreen: _setScreen }: { setScreen: (s: Screen) 
           {/* View all opens Unassigned Plots popup (same list as the top card). */}
           {panel("Unassigned Plots", <LayoutGrid size={13} color={C.sage} />, viewAll(() => setListModal("plots")), (
             <div>
-              {renderUnassignedPlotsList()}
+              {renderUnassignedPlotsList({ limit: 5 })}
             </div>
           ))}
 
